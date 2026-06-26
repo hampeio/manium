@@ -1,5 +1,6 @@
 import asyncio
 import json
+import shutil
 import traceback
 from collections.abc import Callable
 from pathlib import Path
@@ -611,18 +612,24 @@ class GenerationService:
             return RenderResult(True, "Single segment; stitching skipped.", "", videos[0], [])
         stitch_dir = project_dir / "stitched"
         stitch_dir.mkdir(parents=True, exist_ok=True)
+        parts_dir = stitch_dir / "parts"
+        if parts_dir.exists():
+            shutil.rmtree(parts_dir)
+        parts_dir.mkdir(parents=True, exist_ok=True)
         list_file = stitch_dir / "concat_list.txt"
         list_lines = []
-        for video in videos:
-            safe_path = str(video.resolve()).replace("'", "'\\''")
-            list_lines.append(f"file '{safe_path}'")
+        for index, video in enumerate(videos, start=1):
+            part_name = f"part_{index:03d}.mp4"
+            shutil.copy2(video, parts_dir / part_name)
+            list_lines.append(f"file 'parts/{part_name}'")
         list_file.write_text("\n".join(list_lines), encoding="utf-8")
         output = stitch_dir / "course_final.mp4"
-        command = ["ffmpeg", "-y", "-f", "concat", "-safe", "0", "-i", str(list_file.resolve()), "-c", "copy", str(output.resolve())]
+        command = [self._ffmpeg_exe(), "-y", "-f", "concat", "-safe", "0", "-i", "concat_list.txt", "-c", "copy", "course_final.mp4"]
         emit("Stitching rendered segments with ffmpeg.")
         try:
             process = await asyncio.create_subprocess_exec(
                 *command,
+                cwd=str(stitch_dir.resolve()),
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
             )
@@ -631,7 +638,20 @@ class GenerationService:
             return RenderResult(False, "", str(exc), None, command, environment_error=True)
         stdout = stdout_bytes.decode("utf-8", errors="replace")
         stderr = stderr_bytes.decode("utf-8", errors="replace")
+        (stitch_dir / "stitch_stdout.log").write_text(stdout, encoding="utf-8")
+        (stitch_dir / "stitch_stderr.log").write_text(stderr, encoding="utf-8")
         return RenderResult(process.returncode == 0 and output.exists(), stdout, stderr, output if output.exists() else None, command)
+
+    def _ffmpeg_exe(self) -> str:
+        found = shutil.which("ffmpeg")
+        if found:
+            return found
+        try:
+            import imageio_ffmpeg
+
+            return imageio_ffmpeg.get_ffmpeg_exe()
+        except Exception as exc:
+            raise FileNotFoundError("找不到 ffmpeg。请安装 ffmpeg，或安装 imageio-ffmpeg。") from exc
 
     async def _render_checked(
         self,

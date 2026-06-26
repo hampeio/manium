@@ -347,6 +347,16 @@ def project_status(project_dir: str) -> dict[str, object]:
     segment_manifest = read_json("segment_manifest.json", {})
     final_summary = read_json("final_summary.json", {})
     segments = segment_manifest.get("segments", []) if isinstance(segment_manifest, dict) else []
+    stitched_video = root / "stitched" / "course_final.mp4"
+    final_video_path = str(stitched_video.resolve()) if stitched_video.exists() else None
+    if final_video_path and isinstance(final_summary, dict):
+        final_summary.setdefault("video_path", final_video_path)
+        final_summary.setdefault("output_video_path", final_video_path)
+    stages = stage_manifest.get("stages", []) if isinstance(stage_manifest, dict) else []
+    if final_video_path:
+        for stage in stages:
+            if isinstance(stage, dict) and stage.get("is_stitching_stage"):
+                stage["status"] = "stitched"
 
     def latest_segment_video(folder: Path) -> str | None:
         if not folder.exists() or not folder.is_dir():
@@ -381,10 +391,12 @@ def project_status(project_dir: str) -> dict[str, object]:
                 segment["video_path"] = video_path
                 segment["status"] = "rendered"
                 break
+        if final_video_path:
+            segment["final_video_path"] = final_video_path
 
     return {
         "project_dir": str(root),
-        "stages": stage_manifest.get("stages", []) if isinstance(stage_manifest, dict) else [],
+        "stages": stages,
         "segments": segments,
         "summary": final_summary if isinstance(final_summary, dict) else {},
     }
