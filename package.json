@@ -1,0 +1,14 @@
+{
+  "name": "manim-teaching-animation-generator",
+  "version": "0.1.0",
+  "description": "Windows desktop app for AI-assisted Manim teaching animation generation.",
+  "main": "electron/main.js",
+  "scripts": {
+    "start": "electron .",
+    "backend": "python -m uvicorn backend.main:app --host 127.0.0.1 --port 8765",
+    "check": "python -m compileall backend"
+  },
+  "devDependencies": {
+    "electron": "^31.7.7"
+  }
+}

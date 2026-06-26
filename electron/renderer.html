@@ -1,0 +1,250 @@
+﻿<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Manim Teaching Animation Generator</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <header class="topbar">
+        <div>
+          <h1>Manim 教学动画生成器</h1>
+          <p>AI 分镜 · Manim 渲染 · 自动修复 · 本地导出</p>
+        </div>
+        <div class="top-actions">
+          <button id="quickModeTab" class="mode-tab active">快速生成</button>
+          <button id="workflowModeTab" class="mode-tab">节点工作流</button>
+          <button id="generateBtn" class="primary">生成</button>
+        </div>
+      </header>
+
+      <main id="quickView" class="workspace">
+        <section class="panel inputs">
+          <div class="panel-title">输入</div>
+          <label class="upload-box">
+            <input id="imageInput" type="file" accept="image/png,image/jpeg,image/webp,image/bmp" />
+            <span id="imageName">选择图片</span>
+          </label>
+
+          <label>
+            提示词
+            <textarea id="promptInput" placeholder="例如：用 3Blue1Brown 风格解释悬索桥的受力路径，展示桥塔、主缆、吊索、桥面荷载和悬链线。"></textarea>
+          </label>
+
+          <div class="grid two">
+            <label>
+              服务商
+              <select id="providerInput">
+                <option value="mock">本地 Mock</option>
+                <option value="openai">OpenAI / GPT</option>
+                <option value="deepseek" selected>DeepSeek</option>
+              </select>
+            </label>
+            <label>
+              渲染质量
+              <select id="qualityInput">
+                <option value="preview_720p">720p 快速预览</option>
+                <option value="final_1080p">1080p 正式输出</option>
+                <option value="low" selected>低清调试</option>
+              </select>
+            </label>
+            <label>
+              总时长
+              <select id="durationInput">
+                <option value="300" selected>5 分钟</option>
+                <option value="420">7 分钟</option>
+                <option value="600">10 分钟</option>
+                <option value="900">15 分钟</option>
+              </select>
+            </label>
+            <label>
+              最大视频长度（分钟）
+              <input id="maxDurationMinutesInput" type="number" min="1" max="60" step="1" value="5" />
+            </label>
+            <label>
+              分镜数量
+              <select id="sceneCountModeInput">
+                <option value="auto" selected>AI 自主编排</option>
+                <option value="manual">手动指定</option>
+              </select>
+              <input id="sceneCountInput" type="number" min="6" max="60" step="1" value="15" />
+            </label>
+          </div>
+
+          <div class="input-action-panel">
+            <button id="promptPanelBtn" class="secondary full-width">&#x6D41;&#x7A0B;&#x63D0;&#x793A;&#x8BCD;</button>
+            <div class="path-line">&#x67E5;&#x770B;&#x548C;&#x4FEE;&#x6539;&#x5927;&#x7EB2;&#x3001;&#x5206;&#x955C;&#x3001;&#x4EE3;&#x7801;&#x751F;&#x6210;&#x3001;&#x4FEE;&#x590D;&#x7B49;&#x5185;&#x90E8;&#x63D0;&#x793A;&#x8BCD;&#x3002;</div>
+          </div>
+
+          <label>
+            API Key
+            <input id="apiKeyInput" type="password" placeholder="可选，默认优先读取本地 .env。" />
+          </label>
+          <label>
+            Base URL
+            <input id="baseUrlInput" value="https://api.deepseek.com/v1" placeholder="https://api.deepseek.com/v1" />
+          </label>
+          <label>
+            模型名称
+            <input id="modelInput" value="deepseek-v4-pro" placeholder="deepseek-v4-pro" />
+          </label>
+
+          <label class="check-row">
+            <input id="compactTimingInput" type="checkbox" checked />
+            <span>紧凑节奏模式：减少分镜间等待，避免大面积空白</span>
+          </label>
+
+          <button id="outputBtn" class="secondary">选择输出目录</button>
+          <div id="outputDir" class="path-line">默认：generated_projects</div>
+        </section>
+
+        <section class="panel player">
+          <div class="panel-title">视频预览</div>
+          <div class="video-review-layout">
+            <video id="videoPlayer" controls></video>
+            <aside class="segment-annotation-panel">
+              <div class="annotation-title">片段标注</div>
+              <div id="annotationSegmentLabel" class="path-line">请选择下方分镜片段</div>
+              <textarea id="segmentAnnotationInput" placeholder="例如：这一段和上一段太像；请改成颗粒力链放大图，减少横断面复用。"></textarea>
+              <button id="sendSegmentAnnotationBtn" class="primary" disabled>发送给 AI 修正此片段</button>
+              <div id="annotationStatus" class="path-line">不会阻止当前生成任务。</div>
+            </aside>
+          </div>
+          <div class="player-actions">
+            <button id="replayBtn" class="secondary">重播</button>
+            <button id="pauseTaskBtn" class="secondary" disabled>暂停生成</button>
+            <button id="resumeTaskBtn" class="secondary" disabled>继续生成</button>
+            <span id="projectPath">项目：尚未生成</span>
+          </div>
+          <div id="audioStatus" class="status-line">配音：尚未生成</div>
+          <div class="segment-strip">
+            <div class="segment-strip-title">三阶段生成</div>
+            <div id="stagePreviewList" class="stage-preview-list"></div>
+            <div class="segment-strip-title">片段预览</div>
+            <div id="segmentPreviewList" class="segment-preview-list"></div>
+            <div class="segment-strip-title">语音合成预览</div>
+            <div id="audioPreviewList" class="audio-preview-list"></div>
+          </div>
+        </section>
+
+        <section class="panel logs">
+          <div class="panel-title">生成日志</div>
+          <pre id="logOutput"></pre>
+        </section>
+
+        <section class="panel preview">
+          <div class="tabs">
+            <button class="tab active" data-tab="storyboard">分镜</button>
+            <button class="tab" data-tab="code">Manim 代码</button>
+            <button class="tab" data-tab="repairs">修复记录</button>
+            <button class="tab" data-tab="files">项目文件</button>
+          </div>
+          <pre id="storyboardView" class="tab-view"></pre>
+          <pre id="codeView" class="tab-view hidden"></pre>
+          <pre id="repairsView" class="tab-view hidden"></pre>
+          <div id="filesView" class="tab-view hidden file-preview">
+            <div id="projectFileList" class="project-file-list"></div>
+            <pre id="projectFileContent" class="project-file-content"></pre>
+          </div>
+          <div class="edit-panel">
+            <div class="panel-title">生成后修改</div>
+            <textarea id="editPromptInput" placeholder="例如：减少分镜之间的等待时间，让画面持续变化；删除空白停顿；把弹幕演示放大。"></textarea>
+            <div class="edit-actions">
+              <button id="applyEditBtn" class="primary" disabled>应用修改并重新生成</button>
+              <span id="editStatus" class="path-line">生成完成后可提交修改要求。</span>
+            </div>
+            <pre id="editHistory" class="edit-history"></pre>
+          </div>
+        </section>
+      </main>
+
+      <main id="workflowView" class="workflow-shell hidden">
+        <section class="workflow-toolbar panel">
+          <button id="loadMathTemplateBtn" class="secondary">鏁板妯℃澘</button>
+          <button id="loadImageTemplateBtn" class="secondary">鍥剧墖璁茶В妯℃澘</button>
+          <button id="loadMechanicsTemplateBtn" class="secondary">鍔涘妯℃澘</button>
+          <button id="validateWorkflowBtn" class="secondary">验证工作流</button>
+          <button id="runWorkflowBtn" class="primary">运行工作流</button>
+          <button id="saveWorkflowBtn" class="secondary">淇濆瓨 JSON</button>
+          <label class="file-button secondary">
+            鍔犺浇 JSON
+            <input id="loadWorkflowInput" type="file" accept="application/json" />
+          </label>
+          <button id="fitWorkflowBtn" class="secondary">閫傞厤瑙嗗浘</button>
+        </section>
+
+        <section class="workflow-layout">
+          <aside class="panel node-library">
+            <div class="panel-title">节点库</div>
+            <div id="nodeLibrary"></div>
+          </aside>
+
+          <section class="panel workflow-canvas-panel">
+            <div id="workflowCanvas" class="workflow-canvas">
+              <svg id="workflowEdges" class="workflow-edges"></svg>
+              <div id="workflowNodes" class="workflow-nodes"></div>
+            </div>
+          </section>
+
+          <aside class="workflow-side">
+            <section class="panel node-inspector">
+              <div class="panel-title">鍙傛暟闈㈡澘</div>
+              <div id="nodeInspector" class="inspector-empty">璇烽€夋嫨鑺傜偣</div>
+            </section>
+
+            <section class="panel workflow-result">
+              <div class="panel-title">鐢熸垚缁撴灉</div>
+              <video id="workflowVideoPlayer" controls></video>
+              <div class="player-actions">
+                <button id="workflowReplayBtn" class="secondary">閲嶆挱</button>
+                <span id="workflowProjectPath">项目：尚未生成</span>
+              </div>
+              <div class="tabs compact-tabs">
+                <button class="workflow-result-tab active" data-workflow-result-tab="summary">鎽樿</button>
+                <button class="workflow-result-tab" data-workflow-result-tab="storyboard">鍒嗛暅</button>
+                <button class="workflow-result-tab" data-workflow-result-tab="code">浠ｇ爜</button>
+              </div>
+              <pre id="workflowSummaryView" class="workflow-result-view"></pre>
+              <pre id="workflowStoryboardView" class="workflow-result-view hidden"></pre>
+              <pre id="workflowCodeView" class="workflow-result-view hidden"></pre>
+            </section>
+          </aside>
+        </section>
+
+        <section class="panel workflow-log-panel">
+          <div class="panel-title">工作流日志</div>
+          <pre id="workflowLog"></pre>
+        </section>
+      </main>
+    </div>
+
+    <div id="promptModal" class="modal hidden">
+      <div class="modal-card prompt-modal-card">
+        <div class="modal-header">
+          <div>
+            <div class="panel-title">流程提示词</div>
+            <p>查看和修改系统提示词、大纲、分镜、代码生成、修复等内部提示词。</p>
+          </div>
+          <button id="closePromptPanelBtn" class="secondary">鍏抽棴</button>
+        </div>
+        <div class="prompt-editor-layout">
+          <div id="promptNameList" class="prompt-name-list"></div>
+          <div class="prompt-editor-main">
+            <label>
+              鎻愮ず璇嶅悕绉?              <input id="promptNameInput" readonly />
+            </label>
+            <textarea id="promptTemplateInput" class="prompt-template-input"></textarea>
+            <div class="prompt-editor-actions">
+              <button id="savePromptBtn" class="primary">保存提示词</button>
+              <button id="reloadPromptBtn" class="secondary">閲嶆柊璇诲彇</button>
+              <span id="promptPanelStatus" class="path-line">等待操作。</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <script src="./renderer.js"></script>
+  </body>
+</html>

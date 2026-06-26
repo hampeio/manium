@@ -1,0 +1,503 @@
+你是一名资深全栈软件工程师、Electron 桌面软件工程师、React Flow 节点编辑器工程师、Python 后端工程师、AI Agent 工程师、Manim 动画工程师。
+
+请在现有的“Manim 教学动画生成器”项目中实现一个“高级模式：节点工作流编辑器”。
+
+一、项目背景
+
+当前软件目标是：
+
+用户上传图像 / 输入提示词 → AI 理解内容 → 生成教学目标 → 生成 3–5 个分镜 → 生成 Manim 代码 → 自动运行 Manim 渲染 → 失败后最多自动修复 3 轮 → 导出视频、字幕、代码、日志 → 在软件内播放视频。
+
+现在需要新增一个仿 ComfyUI 思路的节点工作流系统。
+
+注意：不是复制 ComfyUI 的代码、品牌、UI 细节或图像生成逻辑，而是借鉴其“节点图、可连接端口、可视化工作流、可执行 graph、模板化流程”的交互思路，用于 Manim 教学动画生成。
+
+二、第一版定位
+
+第一版节点工作流是高级模式，不替代原来的快速生成流程。
+
+软件顶部需要有两个 Tab：
+
+1. 快速生成；
+2. 节点工作流。
+
+快速生成保留原来的固定流程。
+
+节点工作流作为高级模式，允许用户通过节点画布组织 Manim 教学动画生成流程。
+
+第一版节点工作流目标：
+
+1. 支持类似 ComfyUI 的自由拖拽节点画布；
+2. 支持节点添加、删除、移动、连线；
+3. 支持画布缩放、拖拽、MiniMap、一键适配视图；
+4. 支持左侧节点库；
+5. 支持右侧节点参数面板；
+6. 支持下方运行日志区；
+7. 支持节点状态显示；
+8. 支持工作流保存为 JSON；
+9. 支持从 JSON 加载工作流；
+10. 支持 2–3 个内置模板；
+11. 支持运行整个工作流；
+12. 第一版暂不实现单节点运行，但需要预留接口；
+13. 第一版暂不实现复杂智能缓存，但必须保存每个节点输出；
+14. 第一版工作流必须是 DAG，不允许形成环；
+15. 自动修复循环不在 graph 中形成环，而是封装在 RenderPipeline 内部。
+
+三、技术栈要求
+
+前端：
+
+1. Electron；
+2. React；
+3. React Flow；
+4. TypeScript 优先；
+5. 深色主题；
+6. 节点画布采用 React Flow 实现。
+
+后端：
+
+1. Python；
+2. FastAPI 或现有后端框架；
+3. 后端负责解析和执行 workflow graph；
+4. 前端只负责编辑、展示、提交 graph，不在前端执行 AI 或 Manim 逻辑；
+5. 后端根据节点连线生成 DAG；
+6. 后端对 DAG 进行拓扑排序；
+7. 后端按拓扑顺序执行节点；
+8. 每个节点输出都保存到项目文件夹。
+
+四、节点工作流和固定流程的关系
+
+保留快速生成模式。
+
+快速生成模式继续使用固定流程：
+
+输入 → 图像理解 / 语义理解 → 教学规划 → 分镜 → Manim 代码 → 渲染 → 输出。
+
+节点工作流模式使用可视化 graph：
+
+用户通过节点连接决定执行流程。
+
+第一版可以提供默认模板，让用户一键加载常见流程。
+
+五、第一版固定节点类型
+
+请实现以下节点类型：
+
+1. InputImageNode：图片输入节点；
+2. PromptInputNode：提示词输入节点；
+3. ModelConfigNode：模型配置节点；
+4. ImagePreprocessNode：图像预处理节点；
+5. ImageUnderstandNode：图像理解节点；
+6. TeachingPlanNode：教学目标规划节点；
+7. StoryboardNode：分镜生成节点；
+8. SubtitleNode：字幕生成节点；
+9. ManimCodeNode：Manim 代码生成节点；
+10. RenderNode：Manim 渲染节点；
+11. RepairNode：错误修复节点；
+12. OutputNode：结果输出节点；
+13. PreviewNode：预览节点；
+14. CommentNode：注释节点。
+
+说明：
+
+1. 第一版节点类型固定；
+2. 支持用户添加 / 删除这些固定类型节点；
+3. 第一版不实现插件式自定义节点；
+4. ImagePreprocessNode 第一版只做基础占位，例如检查格式、复制图片、预留压缩 / OCR / 标注识别接口；
+5. RepairNode 可以在画布中显示，但实际执行时修复逻辑封装到 RenderNode 或 RenderPipeline 内部，避免 graph 出现环；
+6. CommentNode 不参与执行，只用于画布注释。
+
+六、端口类型系统
+
+第一版必须实现类型化端口。
+
+端口类型包括：
+
+1. Image；
+2. Text；
+3. Prompt；
+4. ModelConfig；
+5. Markdown；
+6. StoryboardJSON；
+7. SubtitleJSON；
+8. ManimCode；
+9. PythonFile；
+10. VideoFile；
+11. AudioFile；
+12. Log；
+13. ProjectPath；
+14. ErrorReport；
+15. Any。
+
+每个节点必须声明：
+
+1. 输入端口；
+2. 输出端口；
+3. 端口名称；
+4. 端口类型；
+5. 是否必填；
+6. 默认值；
+7. 端口说明。
+
+连线规则：
+
+1. 相同类型可以连接；
+2. Any 可以接收任意类型；
+3. 子类型兼容规则需要集中管理；
+4. 不允许明显错误连接，例如 Image 直接连接到 RenderNode 的 code 输入；
+5. 运行前必须验证端口是否连接完整；
+6. 保存前也应检查 workflow 的基础合法性。
+
+七、节点状态
+
+每个节点需要支持以下状态：
+
+1. idle：等待执行；
+2. running：正在执行；
+3. success：执行成功；
+4. failed：执行失败；
+5. skipped：已跳过；
+6. stopped：已停止。
+
+前端节点卡片需要显示状态。
+
+状态显示要求：
+
+1. 节点卡片上显示简短状态；
+2. 失败节点显示简短错误；
+3. 右侧面板显示完整错误；
+4. 下方日志区显示执行日志；
+5. result_summary 记录最终错误和输出路径。
+
+八、节点颜色与界面风格
+
+整体界面使用深色主题。
+
+节点颜色可以按类别简单区分：
+
+1. 输入节点；
+2. AI 节点；
+3. 规划节点；
+4. 代码节点；
+5. 渲染节点；
+6. 输出节点；
+7. 注释节点。
+
+不要让颜色过多、过亮、杂乱。
+
+端口需要显示类型名称。
+
+连线不必按类型显示复杂颜色，第一版保持简洁。
+
+九、画布布局
+
+节点工作流界面建议布局：
+
+顶部：
+
+1. 快速生成 / 节点工作流 Tab；
+2. 保存工作流；
+3. 加载工作流；
+4. 验证工作流；
+5. 运行工作流；
+6. 停止运行；
+7. 加载模板；
+8. 一键适配视图。
+
+左侧：
+
+1. 节点库；
+2. 节点分类；
+3. 拖拽节点到画布。
+
+中间：
+
+1. React Flow 画布；
+2. 自由拖拽节点；
+3. 连线；
+4. 缩放；
+5. MiniMap；
+6. 背景网格；
+7. 一键适配视图。
+
+右侧：
+
+1. 当前选中节点参数面板；
+2. 节点输入端口说明；
+3. 节点输出端口说明；
+4. 参数编辑；
+5. 输出预览；
+6. 错误信息。
+
+底部：
+
+1. 工作流运行日志；
+2. 当前运行节点；
+3. 节点输出路径；
+4. 报错与修复记录摘要。
+
+十、节点参数面板控件
+
+右侧参数面板需要支持：
+
+1. 单行文本框；
+2. 多行文本框；
+3. 下拉选择；
+4. 数字输入；
+5. 开关；
+6. 文件路径选择；
+7. 只读输出预览；
+8. JSON 预览；
+9. Markdown 预览；
+10. 代码预览；
+11. 图片预览；
+12. 视频预览；
+13. 日志预览。
+
+十一、工作流模板
+
+第一版内置 3 个模板：
+
+模板一：数学函数讲解模板
+
+默认流程：
+PromptInputNode → ModelConfigNode → TeachingPlanNode → StoryboardNode → SubtitleNode → ManimCodeNode → RenderNode → OutputNode → PreviewNode。
+
+用途：
+解释函数、图像、公式推导、结论总结。
+
+模板二：图片题目讲解模板
+
+默认流程：
+InputImageNode → ImagePreprocessNode → ImageUnderstandNode；
+PromptInputNode → TeachingPlanNode；
+ImageUnderstandNode → TeachingPlanNode → StoryboardNode → SubtitleNode → ManimCodeNode → RenderNode → OutputNode → PreviewNode。
+
+用途：
+用户上传教材截图、题目截图、手写笔记图片后，生成讲解动画。
+
+模板三：工程力学简支梁模板
+
+默认流程：
+PromptInputNode → ModelConfigNode → TeachingPlanNode → StoryboardNode → SubtitleNode → ManimCodeNode → RenderNode → OutputNode → PreviewNode。
+
+用途：
+解释支座、荷载、反力、弯矩图、剪力图、结构受力路径等工程力学内容。
+
+模板要求：
+
+1. 模板保存为 JSON 文件；
+2. 用户可以加载模板；
+3. 用户修改后可以保存为普通 workflow；
+4. 第一版不做复杂模板管理；
+5. 导出模板时不包含用户私人图片和 API Key。
+
+十二、工作流保存与加载
+
+工作流 JSON 必须保存：
+
+1. workflow_id；
+2. workflow_name；
+3. workflow_version；
+4. app_version；
+5. description；
+6. created_at；
+7. updated_at；
+8. nodes；
+9. edges；
+10. node positions；
+11. node params；
+12. input ports；
+13. output ports；
+14. edge source / target；
+15. edge sourceHandle / targetHandle；
+16. metadata；
+17. viewport；
+18. template_info。
+
+必须预留 workflow 版本迁移机制，例如：
+
+1. workflow_version；
+2. migration handler；
+3. schema validation；
+4. 旧版本 workflow 加载时提示兼容性。
+
+十三、API Key 安全要求
+
+ModelConfigNode 可以显示 API Key 输入区域。
+
+同时支持从 .env 读取默认 API Key。
+
+安全要求：
+
+1. API Key 不允许硬编码；
+2. API Key 不允许写入 workflow JSON；
+3. 保存 workflow 时必须脱敏；
+4. 日志中不允许显示 API Key；
+5. 项目文件夹中不允许保存明文 API Key；
+6. 前端传递给后端时只用于本次任务；
+7. 报错时不允许把 Authorization header 打印出来；
+8. result_summary 中只记录 provider、model_name、base_url 是否存在，不记录 key。
+
+十四、工作流执行规则
+
+第一版只支持运行整个工作流。
+
+执行流程：
+
+1. 前端提交 workflow JSON；
+2. 后端验证 workflow；
+3. 后端检查端口连接；
+4. 后端检查是否为 DAG；
+5. 后端进行拓扑排序；
+6. 后端创建独立项目文件夹；
+7. 后端按顺序执行节点；
+8. 每个节点执行前更新状态为 running；
+9. 成功后更新为 success；
+10. 失败后更新为 failed；
+11. 停止时更新为 stopped；
+12. 已跳过节点更新为 skipped；
+13. 每个节点输出保存到 workflow_outputs/node_id/；
+14. 前端轮询或订阅状态更新；
+15. 前端更新节点状态和日志；
+16. OutputNode 汇总最终结果；
+17. PreviewNode 加载视频结果。
+
+十五、停止运行
+
+第一版需要实现基础停止运行按钮。
+
+要求：
+
+1. 用户点击停止后，后端标记任务为停止；
+2. 已完成节点输出保留；
+3. 未执行节点标记为 skipped 或 stopped；
+4. 如果当前正在 Manim 渲染，尽量终止子进程；
+5. 第一版不要求完全强杀所有复杂子进程，但必须在日志中说明停止状态；
+6. 停止后允许用户修改 workflow 并重新运行整个工作流。
+
+十六、节点输出保存
+
+每个节点输出保存在：
+
+projects/YYYYMMDD_HHMMSS_topic_slug/workflow_outputs/{node_id}/
+
+每个节点至少保存：
+
+1. input_snapshot.json；
+2. output.json；
+3. output.md 或 output.txt；
+4. node.log；
+5. error.json，如果失败；
+6. artifacts/，用于保存图片、代码、视频等文件。
+
+项目摘要 result_summary.md 需要记录关键节点输出路径。
+
+十七、日志要求
+
+前端日志显示摘要，不要过度刷屏。
+
+前端显示：
+
+1. 工作流开始；
+2. 当前执行节点；
+3. 节点成功；
+4. 节点失败；
+5. 模型调用摘要；
+6. 渲染命令摘要；
+7. 输出路径；
+8. 最终状态。
+
+文件中保存完整日志：
+
+1. workflow.log；
+2. 每个节点 node.log；
+3. render.log；
+4. repair logs；
+5. error.json。
+
+十八、错误处理
+
+工作流运行失败后：
+
+1. 停在失败节点；
+2. 节点显示 failed；
+3. 节点卡片显示简短错误；
+4. 右侧面板显示完整错误；
+5. 下方日志显示错误摘要；
+6. 保存已完成节点输出；
+7. 保存失败节点输入快照；
+8. 用户可以修改后重新运行整个工作流；
+9. 第一版预留从失败节点继续运行接口，但不需要实现前端按钮。
+
+十九、工作流验证
+
+必须实现“验证工作流”按钮。
+
+验证内容：
+
+1. 是否存在必要输入节点；
+2. 是否存在 OutputNode；
+3. 是否存在未连接的必填端口；
+4. 是否存在类型不兼容连线；
+5. 是否存在环；
+6. 是否存在孤立节点；
+7. 是否存在重复 node id；
+8. 是否存在无效 edge；
+9. 是否存在缺失参数；
+10. 是否存在 API Key 明文保存风险。
+
+验证结果在前端展示。
+
+二十、Mock 模式
+
+第一版必须支持 mock 模式。
+
+Mock 模式用途：
+
+1. 没有 API Key 时测试 UI；
+2. 没有模型服务时测试工作流；
+3. 测试分镜、代码生成、字幕文件、输出路径；
+4. 尽量真实运行 Manim 渲染。
+
+Mock 模式要求：
+
+1. AI 节点返回固定但合理的 mock 结果；
+2. StoryboardNode 返回 3–5 个固定场景；
+3. ManimCodeNode 返回可运行的简单 Manim 代码；
+4. SubtitleNode 返回 .srt 和 .json 字幕；
+5. RenderNode 尽量真实调用 Manim；
+6. 如果本地没有 Manim，则返回清晰错误，不假装成功。
+
+二十一、禁止事项
+
+不要：
+
+1. 删除快速生成模式；
+2. 只做静态画布不做保存 / 加载；
+3. 只做前端节点，不做后端执行；
+4. 在 graph 中实现循环修复；
+5. 允许无效端口随意连接；
+6. 把 API Key 保存进 workflow JSON；
+7. 把所有节点逻辑写在一个文件；
+8. 生成不可运行的伪代码；
+9. 跳过工作流验证；
+10. 跳过节点状态更新；
+11. 跳过项目输出保存；
+12. 第一版实现复杂插件系统；
+13. 第一版实现复杂数据库模板管理；
+14. 第一版实现完整单节点运行 UI。
+
+二十二、开发方式
+
+请分阶段开发。
+
+每个阶段完成后必须输出：
+
+1. 本阶段完成了什么；
+2. 新增或修改了哪些文件；
+3. 如何运行测试；
+4. 当前风险；
+5. 下一阶段计划。
+
+不要一次性只写说明文档。必须真正创建或修改代码文件。

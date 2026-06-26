@@ -1,0 +1,1042 @@
+import asyncio
+import json
+import traceback
+from collections.abc import Callable
+from pathlib import Path
+
+from backend.ai.model_router import ModelRouter
+from backend.ai.schemas import GeneratedAnimation, GenerationStrategy, StoryboardScene, TeachingPlan
+from backend.core.config import Settings
+from backend.image_nodes.validation import transcode_or_compress_placeholder, validate_image
+from backend.pipeline.recorder import PipelineRecorder
+from backend.rendering.code_sanitizer import sanitize_manim_code
+from backend.rendering.manim_renderer import ManimRenderer, RenderResult
+from backend.rendering.static_checker import run_static_check
+from backend.rendering.visual_guard import run_visual_consistency_check
+from backend.services.project_manager import ProjectManager
+from backend.services.subtitle_service import build_subtitles
+from backend.services.tts_service import TTSService
+
+
+ProgressCallback = Callable[[str], None]
+PauseChecker = Callable[[], bool]
+PartialCallback = Callable[[dict[str, object]], None]
+
+
+class GenerationService:
+    """Coordinates project creation, AI planning, Manim rendering, and repair."""
+
+    def __init__(self, settings: Settings, project_manager: ProjectManager):
+        self.settings = settings
+        self.project_manager = project_manager
+        self.renderer = ManimRenderer(settings.manim_command)
+        self.tts_service = TTSService(settings)
+
+    async def run(
+        self,
+        *,
+        project_dir: Path,
+        user_prompt: str,
+        uploaded_image: Path | None,
+        model_router: ModelRouter,
+        quality: str,
+        project_manager: ProjectManager | None = None,
+        progress: ProgressCallback | None = None,
+        pause_checker: PauseChecker | None = None,
+        partial_update: PartialCallback | None = None,
+        total_duration_seconds: int = 300,
+        compact_timing: bool = False,
+        preferred_scene_count: int = 0,
+    ) -> dict[str, object]:
+        writer = project_manager or self.project_manager
+        emit = progress or (lambda _message: None)
+        total_duration_seconds = self._clamp_total_duration(total_duration_seconds)
+        recorder = PipelineRecorder(project_dir)
+        try:
+            emit("Stage 1/3: preparing outline, inputs, and teaching intent.")
+            recorder.start_stage("prepare", "Preparing inputs and project frame.")
+            image_context = await self._prepare_image(project_dir, uploaded_image, writer)
+            await self._pause_if_requested(pause_checker, emit)
+            priority_rule = self._priority_rule(user_prompt, uploaded_image)
+            writer.write_text(project_dir, "inputs/user_prompt.txt", user_prompt or "")
+            recorder.record_problem_frame(
+                user_prompt=user_prompt or "",
+                has_image=uploaded_image is not None,
+                priority_rule=priority_rule,
+                target_duration_seconds=total_duration_seconds,
+                quality=quality,
+                compact_timing=compact_timing,
+            )
+            recorder.complete_stage("prepare", "Inputs prepared.", {"has_image": uploaded_image is not None})
+
+            emit(f"Target total duration: {total_duration_seconds} seconds.")
+            emit("Stage 1/3: calling model once for outline, duration, and AI call count.")
+            recorder.start_stage("outline", "Calling model for outline and generation strategy.")
+            strategy = await model_router.plan_generation_strategy(
+                user_prompt,
+                uploaded_image,
+                image_context,
+                priority_rule,
+                total_duration_seconds,
+            )
+            strategy = self._normalize_strategy(strategy, total_duration_seconds, preferred_scene_count)
+            writer.write_json(project_dir, "generation_strategy.json", strategy.model_dump())
+            emit(f"Outline ready. Planned AI calls: {strategy.ai_call_count}; storyboard batches: {len(strategy.batches)}.")
+            recorder.complete_stage(
+                "outline",
+                "Generation strategy ready.",
+                {"ai_call_count": strategy.ai_call_count, "batch_count": len(strategy.batches)},
+            )
+            await self._pause_if_requested(pause_checker, emit)
+
+            emit("Stage 2/3: generating fine-grained storyboard batches from outline.")
+            recorder.start_stage("storyboard", "Generating storyboard batches.")
+            scenes: list[StoryboardScene] = []
+            for batch in strategy.batches:
+                emit(f"Storyboard batch {batch.batch_index}/{len(strategy.batches)}: {batch.title}")
+                recorder.record_event(
+                    "storyboard",
+                    "info",
+                    "Calling model for storyboard batch.",
+                    {"batch_index": batch.batch_index, "title": batch.title, "scene_count": batch.scene_count},
+                )
+                result = await model_router.generate_storyboard_batch(
+                    strategy,
+                    batch,
+                    len(scenes) + 1,
+                    [scene.title for scene in scenes],
+                )
+                scenes.extend(result.scenes)
+                writer.write_json(project_dir, f"storyboard_batches/batch_{batch.batch_index}.json", result.model_dump())
+                await self._pause_if_requested(pause_checker, emit)
+
+            plan = TeachingPlan(
+                image_understanding=strategy.image_understanding,
+                teaching_goal=strategy.teaching_goal,
+                conflict_strategy=strategy.conflict_strategy,
+                scenes=self._renumber_and_scale_scenes(scenes, total_duration_seconds),
+                code_plan=strategy.code_plan,
+            )
+            if compact_timing:
+                emit("Compact timing mode enabled: reducing blank waits between storyboard beats.")
+                plan.code_plan = (
+                    f"{plan.code_plan}\n"
+                    "COMPACT_TIMING: compact timing mode; avoid long blank waits; keep each wait near 2-4 seconds."
+                )
+            emit(f"Storyboard ready: {len(plan.scenes)} fine-grained scenes.")
+            recorder.complete_stage("storyboard", "Storyboard ready.", {"scene_count": len(plan.scenes)})
+
+            visual_design = self._build_visual_design_guidance(plan)
+            writer.write_text(project_dir, "visual_design.md", visual_design)
+            plan.code_plan = (
+                f"{plan.code_plan}\n\n"
+                "VISUAL_DESIGN_SOURCE_OF_TRUTH:\n"
+                f"{visual_design}"
+            )
+            recorder.record_event("visual_design", "info", "Executable visual design guidance written.", {"path": str((project_dir / "visual_design.md").resolve())})
+
+            generated = GeneratedAnimation(plan=plan, manim_code="")
+            self._write_plan_artifacts(project_dir, generated, writer)
+            provisional_stages = self._build_stage_data(plan.scenes, total_duration_seconds, False)
+            provisional_segments = self._build_scene_segment_data(plan.scenes, provisional_stages, [], None)
+            writer.write_json(project_dir, "stage_manifest.json", {"mode": "three_stage_quick_generation", "stages": provisional_stages})
+            writer.write_json(project_dir, "segment_manifest.json", {"mode": "planned_segment_manifest", "segments": provisional_segments})
+            if partial_update:
+                partial_update(
+                    {
+                        "project_dir": str(project_dir.resolve()),
+                        "storyboard": [scene.model_dump() for scene in plan.scenes],
+                        "stages": provisional_stages,
+                        "segments": provisional_segments,
+                        "video_path": None,
+                    }
+                )
+
+            emit("Stage 2/3: generating and rendering segmented Manim course.")
+            recorder.start_stage("render_course", "Generating Manim code and rendering course.")
+            generated, final_result, segment_outputs = await self._render_segmented_or_single(
+                project_dir=project_dir,
+                plan=plan,
+                strategy=strategy,
+                model_router=model_router,
+                quality=quality,
+                writer=writer,
+                emit=emit,
+                total_duration_seconds=total_duration_seconds,
+                recorder=recorder,
+                partial_update=partial_update,
+            )
+            if final_result.success:
+                recorder.complete_stage("render_course", "Course render completed.", {"segments": len(segment_outputs)})
+            else:
+                recorder.fail_stage("render_course", "Course render failed.", {"segments": len(segment_outputs)})
+            emit("AI input/output traces saved.")
+            await self._pause_if_requested(pause_checker, emit)
+
+            emit("Stage 3/3: stitching/exporting final video and writing summary.")
+            recorder.start_stage("export", "Writing summary and optional narration.")
+            await self._pause_if_requested(pause_checker, emit)
+            summary = self._build_summary(project_dir, generated, final_result, writer)
+            summary["segment_render_outputs"] = segment_outputs
+            await self._synthesize_narration(project_dir, generated, summary, emit)
+            stages = self._write_stage_manifest(project_dir, generated, summary, writer, total_duration_seconds)
+            self._write_segment_manifest(project_dir, generated, summary, writer, stages, segment_outputs)
+            summary["total_duration_seconds"] = total_duration_seconds
+            summary["stage_manifest_path"] = str((project_dir / "stage_manifest.json").resolve())
+            summary["segment_manifest_path"] = str((project_dir / "segment_manifest.json").resolve())
+            summary["stages"] = self._load_stage_manifest(project_dir)
+            summary["segments"] = self._load_segment_manifest(project_dir)
+            summary.update(recorder.artifact_paths)
+            writer.write_json(project_dir, "final_summary.json", summary)
+            recorder.complete_stage("export", "Project summary written.", {"success": final_result.success})
+            recorder.finish("completed" if final_result.success else "failed")
+            return summary
+        except Exception as exc:
+            error = "".join(traceback.format_exception(exc))
+            writer.write_text(project_dir, "logs/backend_error.log", error)
+            recorder.record_event("pipeline", "error", str(exc), {"traceback_path": str((project_dir / "logs" / "backend_error.log").resolve())})
+            recorder.finish("failed")
+            raise
+
+    async def replace_segment(
+        self,
+        *,
+        project_dir: Path,
+        segment_id: str,
+        edit_prompt: str,
+        model_router: ModelRouter,
+        quality: str,
+        progress: ProgressCallback | None = None,
+        partial_update: PartialCallback | None = None,
+    ) -> dict[str, object]:
+        """Regenerate one rendered segment inside an existing project and restitch available videos."""
+
+        emit = progress or (lambda _message: None)
+        writer = ProjectManager(project_dir)
+        plan_path = project_dir / "teaching_plan.json"
+        manifest_path = project_dir / "segment_manifest.json"
+        if not plan_path.exists() or not manifest_path.exists():
+            raise FileNotFoundError("Project does not contain teaching_plan.json or segment_manifest.json.")
+
+        plan_data = json.loads(plan_path.read_text(encoding="utf-8", errors="replace"))
+        plan = TeachingPlan.model_validate(plan_data)
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8", errors="replace"))
+        segments = manifest.get("segments", [])
+        target = next((segment for segment in segments if str(segment.get("id")) == segment_id), None)
+        if not target:
+            raise ValueError(f"Segment not found: {segment_id}")
+
+        scene_indexes = [int(value) for value in target.get("scene_indexes", [])] or [int(str(segment_id).split("_")[-1])]
+        scenes = [scene for scene in plan.scenes if scene.index in scene_indexes]
+        if not scenes:
+            raise ValueError("No storyboard scenes matched the selected segment.")
+
+        revised_index = len(list((project_dir / "segments").glob("replacement_*"))) + 1
+        segment_dir = project_dir / "segments" / f"replacement_{revised_index:02d}_{segment_id}"
+        for folder in ["logs", "repairs", "outputs"]:
+            (segment_dir / folder).mkdir(parents=True, exist_ok=True)
+
+        segment_plan = TeachingPlan(
+            image_understanding=plan.image_understanding,
+            teaching_goal=plan.teaching_goal,
+            conflict_strategy=plan.conflict_strategy,
+            scenes=scenes,
+            code_plan=(
+                f"{plan.code_plan}\n\n"
+                "SEGMENT_REPLACEMENT_REQUEST:\n"
+                f"{edit_prompt.strip() or '重新生成该片段，保持主题一致。'}"
+            ),
+        )
+        segment_duration = max(1, round(sum(scene.estimated_seconds for scene in scenes)))
+        emit(f"Replacing {segment_id}: generating revised Manim code.")
+        code = await model_router.generate_code_for_segment(
+            segment_plan,
+            segment_index=int(target.get("segment") or 1),
+            segment_count=max(1, len({str(item.get("segment")) for item in segments if item.get("segment")})),
+            segment_duration_seconds=segment_duration,
+        )
+        code = sanitize_manim_code(code)
+        scene_file = writer.write_text(segment_dir, "scene.py", code)
+        writer.write_text(segment_dir, "original_manim_code.py", code)
+        emit(f"Replacing {segment_id}: rendering revised segment.")
+        result = await self._render_with_repairs(
+            segment_dir,
+            scene_file,
+            code,
+            GeneratedAnimation(plan=segment_plan, manim_code=code),
+            model_router,
+            quality,
+            writer,
+            emit,
+            None,
+        )
+        if not result.success or not result.video_path:
+            raise RuntimeError(result.stderr or result.stdout or "Segment replacement render failed.")
+
+        for item in segments:
+            if str(item.get("id")) == segment_id:
+                item["status"] = "replaced"
+                item["video_path"] = str(result.video_path.resolve())
+                item["project_dir"] = str(segment_dir.resolve())
+                item["code_path"] = str(scene_file.resolve())
+
+        videos: list[Path] = []
+        seen: set[str] = set()
+        for item in segments:
+            path_value = item.get("video_path")
+            if not path_value:
+                continue
+            path = Path(str(path_value))
+            key = str(path.resolve())
+            if path.exists() and key not in seen:
+                seen.add(key)
+                videos.append(path)
+
+        final_result = await self._stitch_segment_videos(project_dir, videos, emit) if videos else result
+        final_video_path = final_result.video_path if final_result.success and final_result.video_path else None
+        stages = self._build_stage_data(plan.scenes, int(sum(scene.estimated_seconds for scene in plan.scenes) or 300), bool(final_video_path))
+        writer.write_json(project_dir, "stage_manifest.json", {"mode": "three_stage_quick_generation", "stages": stages})
+        writer.write_json(project_dir, "segment_manifest.json", {"mode": "replacement_segment_manifest", "segments": segments})
+
+        summary_path = project_dir / "final_summary.json"
+        summary = json.loads(summary_path.read_text(encoding="utf-8", errors="replace")) if summary_path.exists() else {}
+        if final_video_path:
+            output_video = writer.copy_video_to_output(project_dir, final_video_path)
+            summary["video_path"] = str(output_video.resolve())
+        summary["segments"] = segments
+        summary["stages"] = stages
+        summary["manim_code"] = code
+        summary["last_replaced_segment"] = segment_id
+        writer.write_json(project_dir, "final_summary.json", summary)
+        partial = {"project_dir": str(project_dir.resolve()), "segments": segments, "stages": stages, "video_path": summary.get("video_path")}
+        if partial_update:
+            partial_update(partial)
+        return partial | {"success": True, "storyboard": [scene.model_dump() for scene in plan.scenes]}
+
+    async def _pause_if_requested(self, pause_checker: PauseChecker | None, emit: ProgressCallback) -> None:
+        if not pause_checker:
+            return
+        if pause_checker():
+            emit("Task paused. Waiting for resume.")
+        while pause_checker():
+            await asyncio.sleep(0.5)
+
+    async def _prepare_image(self, project_dir: Path, uploaded_image: Path | None, writer: ProjectManager) -> str:
+        if not uploaded_image:
+            return "No image uploaded. The animation will be generated from the user prompt."
+        metadata = validate_image(uploaded_image)
+        transcode_or_compress_placeholder(uploaded_image)
+        context = (
+            "Image saved and format check passed: "
+            f"format={metadata['format']}, width={metadata['width']}, height={metadata['height']}. "
+            "Advanced OCR/detection nodes are reserved for a later version."
+        )
+        writer.write_json(project_dir, "image_understanding.json", {"status": "placeholder", "context": context, "metadata": metadata})
+        return context
+
+    def _priority_rule(self, user_prompt: str, uploaded_image: Path | None) -> str:
+        if user_prompt and uploaded_image:
+            return "Prompt and image are both provided. The prompt has priority; the image is used as content evidence and visual reference."
+        if uploaded_image:
+            return "Only image is provided. The image content is interpreted first."
+        return "Only prompt is provided. The animation is generated from the prompt."
+
+    def _clamp_total_duration(self, value: int) -> int:
+        try:
+            duration = int(value)
+        except (TypeError, ValueError):
+            duration = 300
+        return max(300, min(duration, 1800))
+
+    def _normalize_scene_durations(self, generated: GeneratedAnimation, total_duration_seconds: int) -> None:
+        """Scales storyboard timings so subtitles and stage previews match the requested duration."""
+
+        generated.plan.scenes = self._renumber_and_scale_scenes(generated.plan.scenes, total_duration_seconds)
+
+    def _renumber_and_scale_scenes(self, scenes: list[StoryboardScene], total_duration_seconds: int) -> list[StoryboardScene]:
+        """Renumbers scenes and scales storyboard timings without changing their content."""
+
+        if not scenes:
+            return []
+        base = total_duration_seconds // len(scenes)
+        remainder = total_duration_seconds - base * len(scenes)
+        for index, scene in enumerate(scenes):
+            scene.index = index + 1
+            scene.estimated_seconds = float(base + (1 if index < remainder else 0))
+        return scenes
+
+    def _normalize_strategy(self, strategy: GenerationStrategy, total_duration_seconds: int, preferred_scene_count: int = 0) -> GenerationStrategy:
+        """Keeps the first outline call authoritative while enforcing local safety bounds."""
+
+        strategy.target_duration_seconds = total_duration_seconds
+        if not strategy.batches:
+            return strategy
+        if preferred_scene_count > 0:
+            target_scenes = max(6, min(60, int(preferred_scene_count)))
+            batch_count = max(1, min(len(strategy.batches), target_scenes // 2))
+            strategy.batches = strategy.batches[:batch_count]
+            base_scene_count = target_scenes // batch_count
+            scene_remainder = target_scenes - base_scene_count * batch_count
+            for index, batch in enumerate(strategy.batches):
+                batch.scene_count = base_scene_count + (1 if index < scene_remainder else 0)
+        total_scenes = sum(batch.scene_count for batch in strategy.batches)
+        strategy.estimated_scene_count = total_scenes
+        # One outline call has already happened; then each batch creates
+        # storyboard scenes, and each final storyboard scene gets its own
+        # Manim code/render pass so previews and replacement are precise.
+        strategy.ai_call_count = 1 + len(strategy.batches) + total_scenes
+        base = total_duration_seconds // len(strategy.batches)
+        remainder = total_duration_seconds - base * len(strategy.batches)
+        for index, batch in enumerate(strategy.batches):
+            batch.batch_index = index + 1
+            batch.duration_seconds = base + (1 if index < remainder else 0)
+        return strategy
+
+    def _write_plan_artifacts(self, project_dir: Path, generated: GeneratedAnimation, writer: ProjectManager) -> None:
+        plan = generated.plan.model_dump()
+        srt, timeline = build_subtitles(generated.plan.scenes)
+        writer.write_json(project_dir, "teaching_plan.json", plan)
+        writer.write_text(project_dir, "image_understanding.txt", generated.plan.image_understanding)
+        writer.write_text(project_dir, "teaching_goal.txt", generated.plan.teaching_goal)
+        writer.write_text(project_dir, "code_plan.txt", generated.plan.code_plan)
+        writer.write_json(project_dir, "storyboard.json", [scene.model_dump() for scene in generated.plan.scenes])
+        writer.write_text(project_dir, "subtitles.srt", srt)
+        writer.write_json(project_dir, "timeline_subtitles.json", timeline)
+        writer.write_json(project_dir, "narration.json", [{"scene": scene.index, "text": scene.narration} for scene in generated.plan.scenes])
+
+    def _build_visual_design_guidance(self, plan: TeachingPlan) -> str:
+        """Creates a ManimCat-style executable storyboard guide without another model call."""
+
+        lines = [
+            "# Design",
+            "",
+            "## Goal",
+            f"- 教学目标：{plan.teaching_goal}",
+            "- 代码生成必须以 storyboard.visual_plan 为画面事实来源。",
+            "- 不得复用旧主题素材；非数学主题不得使用坐标轴/向量投影占位图。",
+            "",
+            "## Layout",
+            "- 稳定布局：顶部短标题；左侧主图解区域；右侧关键词/关系卡片；底部时间线或阶段进度。",
+            "- 每个分镜只新增一个主要视觉动作，避免文字堆叠。",
+            "",
+            "## Object Rules",
+            "- persistent：主题标题、主图解区域、阶段进度条。",
+            "- temporary：当前分镜字幕、辅助箭头、强调圈、临时说明卡片。",
+            "- exit：每个分镜结束时清理临时对象，保留主结构和进度状态。",
+            "",
+            "## Shot Plan",
+        ]
+        for scene in plan.scenes:
+            lines.extend(
+                [
+                    f"### Shot {scene.index}: {scene.title}",
+                    f"duration {round(scene.estimated_seconds)}s",
+                    "layout center_focus_side_note",
+                    f"focus {scene.title}",
+                    f"enter {scene.visual_plan}",
+                    "keep title, main_visual_area, progress_timeline",
+                    "exit previous_temp_labels, previous_temp_arrows",
+                    f"note narration: {scene.narration}",
+                    "- start state: 保留上一分镜的主结构。",
+                    "- action: 按 visual_plan 新增或变换一个可见教学对象。",
+                    "- end state: 当前重点被高亮，临时文字不遮挡主图。",
+                    "",
+                ]
+            )
+        lines.extend(
+            [
+                "## Review",
+                "- overlap check: 文字不得压住主图。",
+                "- lifecycle check: 临时对象必须退出。",
+                "- focus check: 每个分镜只突出一个重点。",
+                "- pacing check: 不靠长等待凑时长。",
+            ]
+        )
+        return "\n".join(lines)
+
+    async def _render_segmented_or_single(
+        self,
+        *,
+        project_dir: Path,
+        plan: TeachingPlan,
+        strategy: GenerationStrategy,
+        model_router: ModelRouter,
+        quality: str,
+        writer: ProjectManager,
+        emit: ProgressCallback,
+        total_duration_seconds: int,
+        recorder: PipelineRecorder | None = None,
+        partial_update: PartialCallback | None = None,
+    ) -> tuple[GeneratedAnimation, RenderResult, list[dict[str, object]]]:
+        segments = self._build_storyboard_segments(plan, strategy)
+        if len(segments) <= 1:
+            return await self._render_single_course(project_dir, plan, model_router, quality, writer, emit, total_duration_seconds, recorder)
+
+        segment_outputs: list[dict[str, object]] = []
+        segment_codes: list[str] = []
+        segment_videos: list[Path] = []
+        emit(f"Segmented rendering enabled: {len(segments)} parts, one video per storyboard scene.")
+        for index, scenes in enumerate(segments, start=1):
+            segment_duration = max(1, round(sum(scene.estimated_seconds for scene in scenes)))
+            segment_dir = project_dir / "segments" / f"part_{index:02d}"
+            for folder in ["logs", "repairs", "outputs"]:
+                (segment_dir / folder).mkdir(parents=True, exist_ok=True)
+            segment_plan = TeachingPlan(
+                image_understanding=plan.image_understanding,
+                teaching_goal=plan.teaching_goal,
+                conflict_strategy=plan.conflict_strategy,
+                scenes=scenes,
+                code_plan=plan.code_plan,
+            )
+            writer.write_json(project_dir, f"segments/part_{index:02d}/storyboard.json", [scene.model_dump() for scene in scenes])
+            emit(f"Segment {index}/{len(segments)}: generating Manim code for {len(scenes)} storyboard beat.")
+            if recorder:
+                recorder.record_event("codegen", "info", "Generating segment Manim code.", {"segment": index, "scene_count": len(scenes)})
+            code = await model_router.generate_code_for_segment(
+                segment_plan,
+                segment_index=index,
+                segment_count=len(segments),
+                segment_duration_seconds=segment_duration,
+            )
+            code = sanitize_manim_code(code)
+            segment_codes.append(f"# Segment {index}\n{code}")
+            scene_file = writer.write_text(project_dir, f"segments/part_{index:02d}/scene.py", code)
+            writer.write_text(project_dir, f"segments/part_{index:02d}/original_manim_code.py", code)
+            emit(f"Segment {index}/{len(segments)}: rendering.")
+            result = await self._render_with_repairs(
+                segment_dir,
+                scene_file,
+                code,
+                GeneratedAnimation(plan=segment_plan, manim_code=code),
+                model_router,
+                quality,
+                ProjectManager(segment_dir),
+                emit,
+                recorder,
+            )
+            output = {
+                "segment": index,
+                "id": f"part_{index:02d}",
+                "title": f"片段 {index}",
+                "stage": self._stage_for_segment(index, len(segments)),
+                "scene_indexes": [scene.index for scene in scenes],
+                "success": result.success,
+                "status": "rendered" if result.success and result.video_path else "failed",
+                "video_path": str(result.video_path.resolve()) if result.video_path else None,
+                "project_dir": str(segment_dir.resolve()),
+                "code_path": str(scene_file.resolve()),
+                "estimated_seconds": segment_duration,
+            }
+            segment_outputs.append(output)
+            if not result.success or not result.video_path:
+                emit(f"Segment {index} failed. Keeping existing successful previews; no full-video fallback will be used.")
+                failed = RenderResult(False, result.stdout, result.stderr or f"Segment {index} failed.", None, result.command)
+                return GeneratedAnimation(plan=plan, manim_code="\n\n".join(segment_codes)), failed, segment_outputs
+            segment_videos.append(result.video_path)
+            self._write_live_segment_manifest(project_dir, plan, total_duration_seconds, segment_outputs, None, writer)
+            if partial_update:
+                partial_update(self._build_partial_result(project_dir, plan, total_duration_seconds, segment_outputs, None))
+
+        aggregate_code = "\n\n".join(segment_codes)
+        writer.write_text(project_dir, "scene.py", aggregate_code)
+        writer.write_text(project_dir, "original_manim_code.py", aggregate_code)
+        generated = GeneratedAnimation(plan=plan, manim_code=aggregate_code)
+        stitched = await self._stitch_segment_videos(project_dir, segment_videos, emit)
+        if recorder:
+            recorder.record_event("stitch", "info", "Segment stitching finished.", {"success": stitched.success, "video_count": len(segment_videos)})
+        if not stitched.success:
+            emit("Video stitching failed. Keeping rendered segment previews; no full-video fallback will be used.")
+            self._write_live_segment_manifest(project_dir, plan, total_duration_seconds, segment_outputs, None, writer)
+            if partial_update:
+                partial_update(self._build_partial_result(project_dir, plan, total_duration_seconds, segment_outputs, None))
+            return generated, stitched, segment_outputs
+        self._write_live_segment_manifest(project_dir, plan, total_duration_seconds, segment_outputs, stitched.video_path, writer)
+        if partial_update:
+            partial_update(self._build_partial_result(project_dir, plan, total_duration_seconds, segment_outputs, stitched.video_path))
+        return generated, stitched, segment_outputs
+
+    async def _render_single_course(
+        self,
+        project_dir: Path,
+        plan: TeachingPlan,
+        model_router: ModelRouter,
+        quality: str,
+        writer: ProjectManager,
+        emit: ProgressCallback,
+        total_duration_seconds: int,
+        recorder: PipelineRecorder | None = None,
+    ) -> tuple[GeneratedAnimation, RenderResult, list[dict[str, object]]]:
+        emit("Generating one full Manim source file.")
+        if recorder:
+            recorder.record_event("codegen", "info", "Generating single Manim source.", {"scene_count": len(plan.scenes)})
+        manim_code = await model_router.generate_code_from_plan(plan, total_duration_seconds)
+        generated = GeneratedAnimation(plan=plan, manim_code=sanitize_manim_code(manim_code))
+        scene_file = writer.write_text(project_dir, "scene.py", generated.manim_code)
+        writer.write_text(project_dir, "original_manim_code.py", generated.manim_code)
+        emit("Rendering single Manim video.")
+        result = await self._render_with_repairs(
+            project_dir,
+            scene_file,
+            generated.manim_code,
+            generated,
+            model_router,
+            quality,
+            writer,
+            emit,
+            recorder,
+        )
+        outputs = [
+            {
+                "segment": 1,
+                "scene_indexes": [scene.index for scene in plan.scenes],
+                "success": result.success,
+                "video_path": str(result.video_path.resolve()) if result.video_path else None,
+                "project_dir": str(project_dir.resolve()),
+            }
+        ]
+        return generated, result, outputs
+
+    def _build_storyboard_segments(self, plan: TeachingPlan, strategy: GenerationStrategy) -> list[list[StoryboardScene]]:
+        """Render every storyboard scene as an independent preview segment.
+
+        Strategy batches are only for reducing storyboard token pressure.
+        They must not decide video boundaries, otherwise several UI segment
+        chips point to the same mp4 and replacement cannot target one beat.
+        """
+
+        return [[scene] for scene in plan.scenes]
+
+    async def _stitch_segment_videos(self, project_dir: Path, videos: list[Path], emit: ProgressCallback) -> RenderResult:
+        if len(videos) == 1:
+            return RenderResult(True, "Single segment; stitching skipped.", "", videos[0], [])
+        stitch_dir = project_dir / "stitched"
+        stitch_dir.mkdir(parents=True, exist_ok=True)
+        list_file = stitch_dir / "concat_list.txt"
+        list_lines = []
+        for video in videos:
+            safe_path = str(video.resolve()).replace("'", "'\\''")
+            list_lines.append(f"file '{safe_path}'")
+        list_file.write_text("\n".join(list_lines), encoding="utf-8")
+        output = stitch_dir / "course_final.mp4"
+        command = ["ffmpeg", "-y", "-f", "concat", "-safe", "0", "-i", str(list_file.resolve()), "-c", "copy", str(output.resolve())]
+        emit("Stitching rendered segments with ffmpeg.")
+        try:
+            process = await asyncio.create_subprocess_exec(
+                *command,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+            )
+            stdout_bytes, stderr_bytes = await process.communicate()
+        except FileNotFoundError as exc:
+            return RenderResult(False, "", str(exc), None, command, environment_error=True)
+        stdout = stdout_bytes.decode("utf-8", errors="replace")
+        stderr = stderr_bytes.decode("utf-8", errors="replace")
+        return RenderResult(process.returncode == 0 and output.exists(), stdout, stderr, output if output.exists() else None, command)
+
+    async def _render_checked(
+        self,
+        project_dir: Path,
+        scene_file: Path,
+        quality: str,
+        writer: ProjectManager,
+        attempt_label: str,
+        recorder: PipelineRecorder | None,
+        plan: TeachingPlan,
+    ) -> RenderResult:
+        check = run_static_check(scene_file)
+        writer.write_json(project_dir, f"logs/static_check_{attempt_label}.json", check.to_dict())
+        if recorder:
+            recorder.record_event(
+                "static_check",
+                "info" if check.success else "error",
+                "Static Python compile check finished.",
+                {"attempt": attempt_label, "success": check.success, "checked_path": check.checked_path},
+            )
+        if not check.success:
+            command = ["python", "-m", "py_compile", str(scene_file.resolve())]
+            return RenderResult(False, "", check.error, None, command)
+        visual_check = run_visual_consistency_check(scene_file, plan)
+        writer.write_json(project_dir, f"logs/visual_guard_{attempt_label}.json", visual_check.to_dict())
+        if recorder:
+            recorder.record_event(
+                "visual_guard",
+                "info" if visual_check.success else "error",
+                "Visual consistency check finished.",
+                {"attempt": attempt_label, "success": visual_check.success, "checked_path": visual_check.checked_path},
+            )
+        if not visual_check.success:
+            command = ["visual-guard", str(scene_file.resolve())]
+            return RenderResult(False, "", visual_check.error, None, command)
+        media_dir = project_dir / "media"
+        return await self.renderer.render(scene_file, self.settings.manim_scene_name, media_dir, quality)
+
+    async def _render_with_repairs(
+        self,
+        project_dir: Path,
+        scene_file: Path,
+        current_code: str,
+        generated: GeneratedAnimation,
+        model_router: ModelRouter,
+        quality: str,
+        writer: ProjectManager,
+        emit: ProgressCallback,
+        recorder: PipelineRecorder | None = None,
+    ) -> RenderResult:
+        result = await self._render_checked(project_dir, scene_file, quality, writer, "0", recorder, generated.plan)
+        self.renderer.save_log(project_dir / "logs" / "render_attempt_0.json", result)
+        if result.success:
+            emit("Initial render succeeded.")
+            if recorder:
+                recorder.record_event("render", "info", "Initial render succeeded.", {"project_dir": project_dir})
+            return result
+        if result.environment_error:
+            emit("Render failed because the local Manim environment is not ready. Skipping model repair.")
+            if recorder:
+                recorder.record_event("render", "error", "Render environment is not ready.", {"project_dir": project_dir})
+            return result
+
+        emit("Initial render failed. Starting repair loop.")
+        if recorder:
+            recorder.record_event("repair", "info", "Initial render failed; entering repair loop.", {"project_dir": project_dir})
+        for round_index in range(1, self.settings.max_repair_rounds + 1):
+            emit(f"Repair round {round_index}: asking model to fix Manim code.")
+            repair_dir = project_dir / "repairs" / f"round_{round_index}"
+            repair_dir.mkdir(parents=True, exist_ok=True)
+            writer.write_text(project_dir, f"repairs/round_{round_index}/before.py", current_code)
+            error_log = result.stderr + "\n" + result.stdout
+            repair = await model_router.repair_code(self._repair_goal_context(generated.plan), current_code, error_log)
+            emit(f"Repair round {round_index}: AI input/output trace saved.")
+            current_code = repair.repaired_code
+            current_code = sanitize_manim_code(current_code)
+            writer.write_text(project_dir, f"repairs/round_{round_index}/after.py", current_code)
+            writer.write_text(project_dir, f"repairs/round_{round_index}/notes.txt", repair.notes)
+            writer.write_json(project_dir, f"repairs/round_{round_index}/summary.json", {"round": round_index, "notes": repair.notes})
+            scene_file.write_text(current_code, encoding="utf-8")
+
+            emit(f"Repair round {round_index}: rendering repaired code.")
+            result = await self._render_checked(project_dir, scene_file, quality, writer, str(round_index), recorder, generated.plan)
+            self.renderer.save_log(project_dir / "logs" / f"render_attempt_{round_index}.json", result)
+            if result.success:
+                emit(f"Repair round {round_index} succeeded.")
+                if recorder:
+                    recorder.record_event("repair", "info", "Repair round succeeded.", {"round": round_index})
+                return result
+
+        emit("Repair limit reached. Rendering simplified fallback.")
+        fallback = await model_router.repair_code(self._repair_goal_context(generated.plan), "Create a minimal runnable version.", "The first three repair rounds failed.")
+        fallback_code = sanitize_manim_code(fallback.repaired_code)
+        scene_file.write_text(fallback_code, encoding="utf-8")
+        writer.write_text(project_dir, "repairs/simplified_after_failure.py", fallback_code)
+        writer.write_json(project_dir, "repairs/final_repair_summary.json", {"fallback_notes": fallback.notes})
+        result = await self._render_checked(project_dir, scene_file, "low", writer, "simplified", recorder, generated.plan)
+        self.renderer.save_log(project_dir / "logs" / "render_simplified.json", result)
+        if recorder:
+            recorder.record_event("repair", "info" if result.success else "error", "Simplified fallback render finished.", {"success": result.success})
+        return result
+
+    def _repair_goal_context(self, plan: TeachingPlan) -> str:
+        """Provides enough visual context for repair without resending unrelated project data."""
+
+        scene_lines = [
+            f"{scene.index}. {scene.title} | visual_plan: {scene.visual_plan} | narration: {scene.narration[:80]}"
+            for scene in plan.scenes[:12]
+        ]
+        return "\n".join(
+            [
+                plan.teaching_goal,
+                "",
+                "Current storyboard source of truth:",
+                *scene_lines,
+                "",
+                "Repair must preserve this storyboard and remove stale-topic or generic placeholder visuals.",
+            ]
+        )
+
+    def _build_summary(self, project_dir: Path, generated: GeneratedAnimation, result: RenderResult, writer: ProjectManager) -> dict[str, object]:
+        video_output = None
+        if result.success and result.video_path:
+            video_output = writer.copy_video_to_output(project_dir, result.video_path)
+        return {
+            "success": result.success,
+            "project_dir": str(project_dir.resolve()),
+            "video_path": str(video_output.resolve()) if video_output else None,
+            "scene_file": str((project_dir / "scene.py").resolve()),
+            "storyboard": [scene.model_dump() for scene in generated.plan.scenes],
+            "manim_code": (project_dir / "scene.py").read_text(encoding="utf-8"),
+            "teaching_goal": generated.plan.teaching_goal,
+            "image_understanding": generated.plan.image_understanding,
+            "repair_log_dir": str((project_dir / "repairs").resolve()),
+            "render_log_dir": str((project_dir / "logs").resolve()),
+            "ai_trace_dir": str((project_dir / "ai_traces").resolve()),
+            "ai_trace_files": [str(path.resolve()) for path in sorted((project_dir / "ai_traces").glob("*.json"))],
+            "failure_reason": None if result.success else (result.stderr or result.stdout)[-3000:],
+        }
+
+    async def _synthesize_narration(
+        self,
+        project_dir: Path,
+        generated: GeneratedAnimation,
+        summary: dict[str, object],
+        emit: ProgressCallback,
+    ) -> None:
+        """Adds optional Xunfei narration without making rendering depend on TTS availability."""
+
+        if not self.tts_service.is_configured():
+            summary["tts_enabled"] = False
+            summary["audio_path"] = None
+            summary["tts_status"] = "disabled"
+            summary["tts_message"] = "\u914d\u97f3\u672a\u542f\u7528\u3002"
+            return
+
+        emit("?????????????????")
+        video_path_value = summary.get("video_path")
+        video_path = Path(str(video_path_value)) if video_path_value else None
+        result = await asyncio.to_thread(
+            self.tts_service.synthesize_project_audio,
+            scene_narrations=[scene.narration for scene in generated.plan.scenes],
+            project_dir=project_dir,
+            video_path=video_path,
+        )
+        summary["tts_enabled"] = result.enabled
+        summary["audio_path"] = str(result.audio_path.resolve()) if result.audio_path else None
+        audio_dir = project_dir / "audio"
+        summary["tts_scene_audio_paths"] = [
+            str(path.resolve()) for path in sorted(audio_dir.glob("scene_*.mp3")) if path.is_file() and path.stat().st_size > 0
+        ]
+        summary["silent_video_path"] = summary.get("video_path")
+        summary["tts_status"] = result.status
+        summary["tts_message"] = result.message
+        if result.muxed_video_path and result.muxed_video_path.exists():
+            summary["video_path"] = str(result.muxed_video_path.resolve())
+            emit("???????????????")
+        elif result.error:
+            summary["tts_error"] = result.error
+            if result.audio_path:
+                emit("?????????????????????????")
+            else:
+                emit("??????????????????? logs/tts_error.log?")
+
+    def _write_stage_manifest(
+        self,
+        project_dir: Path,
+        generated: GeneratedAnimation,
+        summary: dict[str, object],
+        writer: ProjectManager,
+        total_duration_seconds: int,
+    ) -> list[dict[str, object]]:
+        """Creates a three-stage content plan for preview, staged rendering, and final stitching."""
+
+        stages = self._build_stage_data(generated.plan.scenes, total_duration_seconds, bool(summary.get("video_path")))
+        writer.write_json(project_dir, "stage_manifest.json", {"mode": "three_stage_quick_generation", "stages": stages})
+        return stages
+
+        scenes = generated.plan.scenes
+        stage_titles = ["第一阶段：铺垫与建模", "第二阶段：推导与可视化", "第三阶段：拼接与总结"]
+        stage_goals = [
+            "生成总大纲、教学目标和开场分镜。",
+            "生成核心解释分镜，并预览阶段内多个片段。",
+            "完成最后总结，并在该阶段执行最终视频拼接/导出。",
+        ]
+        per_stage_duration = total_duration_seconds / 3
+        stages: list[dict[str, object]] = []
+        has_video = bool(summary.get("video_path"))
+        for stage_index in range(1, 4):
+            start = round((stage_index - 1) * len(scenes) / 3)
+            end = round(stage_index * len(scenes) / 3)
+            scene_indexes = [scene.index for scene in scenes[start:end]]
+            if not scene_indexes and scenes:
+                scene_indexes = [scenes[min(stage_index - 1, len(scenes) - 1)].index]
+            stages.append(
+                {
+                    "stage": stage_index,
+                    "title": stage_titles[stage_index - 1],
+                    "goal": stage_goals[stage_index - 1],
+                    "status": "stitched" if stage_index == 3 and has_video else ("rendered" if has_video else "planned"),
+                    "scene_indexes": scene_indexes,
+                    "estimated_seconds": round(per_stage_duration, 1),
+                    "video_path": summary.get("video_path"),
+                    "is_stitching_stage": stage_index == 3,
+                }
+            )
+        writer.write_json(project_dir, "stage_manifest.json", {"mode": "three_stage_quick_generation", "stages": stages})
+        return stages
+
+    def _write_segment_manifest(
+        self,
+        project_dir: Path,
+        generated: GeneratedAnimation,
+        summary: dict[str, object],
+        writer: ProjectManager,
+        stages: list[dict[str, object]],
+        segment_outputs: list[dict[str, object]] | None = None,
+    ) -> None:
+        """Creates a segment manifest for UI preview."""
+
+        video_path = summary.get("video_path")
+        segments = self._build_scene_segment_data(
+            generated.plan.scenes,
+            stages,
+            segment_outputs or [],
+            str(video_path) if video_path else None,
+        )
+        mode = "segmented_video_manifest" if segment_outputs and len(segment_outputs or []) > 1 else "single_video_segment_manifest"
+        writer.write_json(project_dir, "segment_manifest.json", {"mode": mode, "segments": segments})
+        return
+
+        segments = []
+        video_path = summary.get("video_path")
+        segment_outputs = segment_outputs or []
+        video_by_scene = {
+            int(scene_index): output.get("video_path")
+            for output in segment_outputs
+            for scene_index in output.get("scene_indexes", [])
+        }
+        stage_by_scene = {
+            scene_index: int(stage["stage"])
+            for stage in stages
+            for scene_index in stage.get("scene_indexes", [])
+        }
+        for scene in generated.plan.scenes:
+            segments.append(
+                {
+                    "id": f"scene_{scene.index}",
+                    "stage": stage_by_scene.get(scene.index, 1),
+                    "title": scene.title,
+                    "narration": scene.narration,
+                    "status": "rendered" if video_path else "planned",
+                    "video_path": video_by_scene.get(scene.index) or video_path,
+                    "estimated_seconds": scene.estimated_seconds,
+                }
+            )
+        mode = "segmented_video_manifest" if segment_outputs and len(segment_outputs) > 1 else "single_video_segment_manifest"
+        writer.write_json(project_dir, "segment_manifest.json", {"mode": mode, "segments": segments})
+
+    def _build_stage_data(self, scenes: list[StoryboardScene], total_duration_seconds: int, has_video: bool) -> list[dict[str, object]]:
+        stage_titles = ["第一阶段：大纲与前段分镜", "第二阶段：分镜片段生成与预览", "第三阶段：拼接、配音与导出"]
+        stage_goals = [
+            "生成大纲、教学目标，并确定需要生成的分镜片段。",
+            "按分镜逐段生成代码和视频，每个片段可独立预览。",
+            "整合片段、生成分镜台词与配音，并导出最终视频。",
+        ]
+        per_stage_duration = total_duration_seconds / 3
+        stages: list[dict[str, object]] = []
+        for stage_index in range(1, 4):
+            start = round((stage_index - 1) * len(scenes) / 3)
+            end = round(stage_index * len(scenes) / 3)
+            scene_indexes = [scene.index for scene in scenes[start:end]]
+            if not scene_indexes and scenes:
+                scene_indexes = [scenes[min(stage_index - 1, len(scenes) - 1)].index]
+            stages.append(
+                {
+                    "stage": stage_index,
+                    "title": stage_titles[stage_index - 1],
+                    "goal": stage_goals[stage_index - 1],
+                    "status": "stitched" if stage_index == 3 and has_video else ("rendered" if has_video else "planned"),
+                    "scene_indexes": scene_indexes,
+                    "estimated_seconds": round(per_stage_duration, 1),
+                    "is_stitching_stage": stage_index == 3,
+                }
+            )
+        return stages
+
+    def _build_scene_segment_data(
+        self,
+        scenes: list[StoryboardScene],
+        stages: list[dict[str, object]],
+        segment_outputs: list[dict[str, object]],
+        final_video_path: str | None,
+    ) -> list[dict[str, object]]:
+        output_by_scene = {
+            int(scene_index): output
+            for output in segment_outputs
+            for scene_index in output.get("scene_indexes", [])
+        }
+        stage_by_scene = {
+            scene_index: int(stage["stage"])
+            for stage in stages
+            for scene_index in stage.get("scene_indexes", [])
+        }
+        segments: list[dict[str, object]] = []
+        for scene in scenes:
+            output = output_by_scene.get(scene.index, {})
+            video_path = output.get("video_path")
+            segments.append(
+                {
+                    "id": f"scene_{scene.index}",
+                    "stage": output.get("stage") or stage_by_scene.get(scene.index, 1),
+                    "segment": output.get("segment"),
+                    "scene_indexes": output.get("scene_indexes") or [scene.index],
+                    "title": scene.title,
+                    "narration": scene.narration,
+                    "status": output.get("status") or ("rendered" if video_path else "planned"),
+                    "video_path": video_path,
+                    "final_video_path": final_video_path,
+                    "project_dir": output.get("project_dir"),
+                    "code_path": output.get("code_path"),
+                    "estimated_seconds": scene.estimated_seconds,
+                }
+            )
+        return segments
+
+    def _stage_for_segment(self, index: int, count: int) -> int:
+        if count <= 1:
+            return 1
+        return max(1, min(3, round(((index - 1) / max(1, count - 1)) * 2) + 1))
+
+    def _write_live_segment_manifest(
+        self,
+        project_dir: Path,
+        plan: TeachingPlan,
+        total_duration_seconds: int,
+        segment_outputs: list[dict[str, object]],
+        final_video_path: Path | None,
+        writer: ProjectManager,
+    ) -> None:
+        stages = self._build_stage_data(plan.scenes, total_duration_seconds, bool(final_video_path))
+        segments = self._build_scene_segment_data(
+            plan.scenes,
+            stages,
+            segment_outputs,
+            str(final_video_path.resolve()) if final_video_path else None,
+        )
+        writer.write_json(project_dir, "stage_manifest.json", {"mode": "three_stage_quick_generation", "stages": stages})
+        writer.write_json(project_dir, "segment_manifest.json", {"mode": "live_segment_manifest", "segments": segments})
+
+    def _build_partial_result(
+        self,
+        project_dir: Path,
+        plan: TeachingPlan,
+        total_duration_seconds: int,
+        segment_outputs: list[dict[str, object]],
+        final_video_path: Path | None,
+    ) -> dict[str, object]:
+        stages = self._build_stage_data(plan.scenes, total_duration_seconds, bool(final_video_path))
+        segments = self._build_scene_segment_data(
+            plan.scenes,
+            stages,
+            segment_outputs,
+            str(final_video_path.resolve()) if final_video_path else None,
+        )
+        return {
+            "project_dir": str(project_dir.resolve()),
+            "storyboard": [scene.model_dump() for scene in plan.scenes],
+            "stages": stages,
+            "segments": segments,
+            "video_path": str(final_video_path.resolve()) if final_video_path else None,
+        }
+
+    def _load_stage_manifest(self, project_dir: Path) -> list[dict[str, object]]:
+        manifest_path = project_dir / "stage_manifest.json"
+        if not manifest_path.exists():
+            return []
+        import json
+
+        return json.loads(manifest_path.read_text(encoding="utf-8")).get("stages", [])
+
+    def _load_segment_manifest(self, project_dir: Path) -> list[dict[str, object]]:
+        manifest_path = project_dir / "segment_manifest.json"
+        if not manifest_path.exists():
+            return []
+        import json
+
+        return json.loads(manifest_path.read_text(encoding="utf-8")).get("segments", [])

@@ -1,0 +1,13 @@
+.env
+node_modules/
+.venv/
+__pycache__/
+*.pyc
+generated_projects/*
+!generated_projects/.gitkeep
+media/
+.pytest_cache/
+dist/
+tmp_runtime_logs/
+backups/
+*.log
