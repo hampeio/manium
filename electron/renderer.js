@@ -23,6 +23,11 @@ const elements = {
   repairsView: document.getElementById("repairsView"),
   videoPlayer: document.getElementById("videoPlayer"),
   replayBtn: document.getElementById("replayBtn"),
+  originalSegmentPreviewBtn: document.getElementById("originalSegmentPreviewBtn"),
+  correctedSegmentPreviewBtn: document.getElementById("correctedSegmentPreviewBtn"),
+  overallPreviewBtn: document.getElementById("overallPreviewBtn"),
+  composeOverallBtn: document.getElementById("composeOverallBtn"),
+  composeStatus: document.getElementById("composeStatus"),
   pauseTaskBtn: document.getElementById("pauseTaskBtn"),
   resumeTaskBtn: document.getElementById("resumeTaskBtn"),
   rootFolderBtn: document.getElementById("rootFolderBtn"),
@@ -154,6 +159,7 @@ const statusLabels = {
   stopped: "已停止",
   paused: "已暂停",
   stitched: "已拼接",
+  awaiting_compose: "等待手动合成",
   pending: "等待中"
 };
 
@@ -297,6 +303,7 @@ function applyResult(result) {
   currentStages = result.stages || [];
   currentSegments = result.segments || [];
   window.annotationEditor?.setProject(currentProjectDir, currentSegments);
+  updateCompositionControls(result);
   renderStages(currentStages, currentSegments, 3);
   renderSegments(currentSegments, result.video_path);
   renderAudioPreview(result);
@@ -314,6 +321,7 @@ function applyPartialResult(partial) {
   currentStages = partial.stages || currentStages;
   currentSegments = partial.segments || currentSegments;
   window.annotationEditor?.setProject(currentProjectDir, currentSegments);
+  updateCompositionControls(lastQuickResult || partial);
   renderStages(currentStages, currentSegments, detectCurrentStage([]));
   renderSegments(currentSegments, partial.video_path || null);
   renderAudioPreview(partial);
@@ -388,7 +396,7 @@ function renderSegments(segments, fallbackVideoPath) {
   const previousScrollLeft = previousTimeline ? previousTimeline.scrollLeft : 0;
   if (!segments.length) {
     elements.segmentPreviewList.innerHTML = `
-      <button class="compose-chip ${finalVideoPath ? "ready" : ""}" data-video-path="${escapeHtml(finalVideoPath)}">合成<br>视频</button>
+      <button class="compose-chip ${finalVideoPath ? "ready" : ""}" data-video-path="${escapeHtml(finalVideoPath)}">总体<br>预览</button>
       <div class="path-line">暂无片段。等待分镜规划或片段渲染完成。</div>
     `;
     bindComposeVideoButton();
@@ -396,11 +404,11 @@ function renderSegments(segments, fallbackVideoPath) {
   }
   elements.segmentPreviewList.innerHTML = `
     <button class="compose-chip ${finalVideoPath ? "ready" : ""} ${selectedSegmentId === "final" ? "active" : ""}" data-video-path="${escapeHtml(finalVideoPath)}">
-      合成<br>视频
+      总体<br>预览
     </button>
     <div class="segment-timeline">
       ${segments.map((segment, index) => `
-        <button class="segment-chip ${segment.id === selectedSegmentId ? "active" : ""} ${escapeHtml(segment.status || "planned")}" data-video-path="${escapeHtml(segment.video_path || "")}" data-segment-id="${escapeHtml(segment.id || "")}" data-segment-index="${index}">
+        <button class="segment-chip ${segment.id === selectedSegmentId ? "active" : ""} ${escapeHtml(segment.status || "planned")}" data-video-path="${escapeHtml(segment.preview_video_path || segment.video_path || "")}" data-original-video-path="${escapeHtml(segment.original_preview_path || segment.original_video_path || segment.video_path || "")}" data-corrected-video-path="${escapeHtml(segment.corrected_preview_path || segment.corrected_video_path || "")}" data-segment-id="${escapeHtml(segment.id || "")}" data-segment-index="${index}">
           <strong>${index + 1}</strong>
           <span>${escapeHtml(segment.title || segment.id || "片段")}</span>
         </button>
@@ -415,6 +423,8 @@ function renderSegments(segments, fallbackVideoPath) {
       elements.segmentPreviewList.querySelectorAll(".segment-chip, .compose-chip").forEach((item) => item.classList.remove("active"));
       button.classList.add("active");
       selectedSegmentId = button.dataset.segmentId || "";
+      const selectedSegment = currentSegments.find((segment) => segment.id === selectedSegmentId);
+      updateSegmentPreviewControls(selectedSegment);
       if (elements.editStatus) {
         elements.editStatus.textContent = selectedSegmentId ? `已选择 ${selectedSegmentId}，提交修改将只替换该片段。` : "未选择片段。";
       }
@@ -441,6 +451,7 @@ function bindComposeVideoButton() {
     elements.segmentPreviewList.querySelectorAll(".segment-chip, .compose-chip").forEach((item) => item.classList.remove("active"));
     button.classList.add("active");
     selectedSegmentId = "final";
+    updateSegmentPreviewControls(null);
     updateAnnotationSelection(null);
     if (elements.editStatus) {
       elements.editStatus.textContent = "正在预览合成视频；点击某个分镜节点后可只替换该片段。";
@@ -510,7 +521,8 @@ async function monitorBackgroundTask(taskId, label, targetSegmentId = "") {
         elements.annotationStatus.textContent = `${label} 完成，片段已更新。`;
         if (selectedSegmentId === targetSegmentId) {
           const updated = currentSegments.find((segment) => segment.id === targetSegmentId);
-          if (updated?.video_path) playVideoPath(updated.video_path, appendLog);
+          const updatedPreview = updated?.corrected_preview_path || updated?.preview_video_path || updated?.video_path;
+          if (updatedPreview) playVideoPath(updatedPreview, appendLog);
         }
         return;
       }
@@ -542,7 +554,7 @@ function renderAudioPreview(result = {}) {
   const ttsStatus = result.tts_status || lastQuickResult?.tts_status || "pending";
   const count = Math.max(segments.length, audioPaths.length, selectedStoryboardSceneCount() || 0, 1);
   elements.audioPreviewList.innerHTML = Array.from({ length: count }, (_, index) => {
-    const hasAudio = Boolean(audioPaths[index]);
+    const hasAudio = Boolean(segments[index]?.audio_path || audioPaths[index]);
     const state = hasAudio ? "ready" : (ttsStatus === "failed" ? "failed" : "pending");
     return `<div class="audio-segment ${state}" title="语音片段 ${index + 1}"><span>${index + 1}</span></div>`;
   }).join("");
@@ -552,9 +564,12 @@ function applyNonIntrusivePartialResult(partial) {
   if (!partial) return;
   const playingSrc = elements.videoPlayer?.getAttribute("src") || "";
   lastQuickResult = { ...(lastQuickResult || {}), ...partial };
+  currentProjectDir = partial.project_dir || currentProjectDir;
   if (partial.project_dir) elements.projectPath.textContent = `项目：${partial.project_dir}`;
   currentStages = partial.stages || currentStages;
   currentSegments = partial.segments || currentSegments;
+  window.annotationEditor?.setProject(currentProjectDir, currentSegments);
+  updateCompositionControls(lastQuickResult);
   renderStages(currentStages, currentSegments, detectCurrentStage([]));
   renderSegments(currentSegments, partial.video_path || null);
   renderAudioPreview(partial);
@@ -568,6 +583,66 @@ function playVideoPath(videoPath, logger) {
   const videoUrl = `${API_BASE}/video?path=${encodeURIComponent(videoPath)}&t=${Date.now()}`;
   window.annotationEditor?.showVideo();
   loadVideo(elements.videoPlayer, videoUrl, logger);
+}
+
+function updateSegmentPreviewControls(segment) {
+  const originalPath = segment?.original_preview_path || segment?.original_video_path || segment?.video_path || "";
+  const correctedPath = segment?.corrected_preview_path || segment?.corrected_video_path || "";
+  if (elements.originalSegmentPreviewBtn) {
+    elements.originalSegmentPreviewBtn.disabled = !originalPath;
+    elements.originalSegmentPreviewBtn.dataset.videoPath = originalPath;
+  }
+  if (elements.correctedSegmentPreviewBtn) {
+    elements.correctedSegmentPreviewBtn.disabled = !correctedPath;
+    elements.correctedSegmentPreviewBtn.dataset.videoPath = correctedPath;
+  }
+}
+
+function updateCompositionControls(result = {}) {
+  const projectDir = result.project_dir || currentProjectDir || lastQuickResult?.project_dir || "";
+  const segmentsReady = currentSegments.length > 0 && currentSegments.every((segment) => segment.video_path);
+  const composed = Boolean(result.video_path) && !["awaiting_user", "stale"].includes(result.compose_status);
+  if (elements.composeOverallBtn) elements.composeOverallBtn.disabled = !projectDir || !segmentsReady;
+  if (elements.overallPreviewBtn) {
+    elements.overallPreviewBtn.disabled = !composed;
+    elements.overallPreviewBtn.dataset.videoPath = composed ? result.video_path : "";
+  }
+  if (!elements.composeStatus) return;
+  if (result.compose_status === "stale") {
+    elements.composeStatus.textContent = "局部片段已更新；原总体视频已失效，请确认后手动重新合成。";
+  } else if (composed) {
+    elements.composeStatus.textContent = "总体视频已按全部最新片段完成合成。";
+  } else if (segmentsReady) {
+    elements.composeStatus.textContent = "片段已就绪。系统不会自动合成；需要时请点击“合成总体视频”。";
+  } else {
+    elements.composeStatus.textContent = "总体视频仅在全部片段就绪并点击“合成总体视频”后生成。";
+  }
+}
+
+async function submitManualComposition() {
+  const projectDir = currentProjectDir || lastQuickResult?.project_dir || "";
+  if (!projectDir) throw new Error("当前项目路径不可用。");
+  const form = new FormData();
+  form.append("project_dir", projectDir);
+  elements.composeOverallBtn.disabled = true;
+  elements.composeStatus.textContent = "正在检查片段音画时长并合成总体视频...";
+  const response = await fetch(`${API_BASE}/compose_project_async`, { method: "POST", body: form });
+  const task = await response.json();
+  if (!response.ok) throw new Error(task.detail || "总体视频合成任务提交失败。");
+  while (true) {
+    const taskResponse = await fetch(`${API_BASE}/tasks/${task.task_id}`);
+    const taskState = await taskResponse.json();
+    if (!taskResponse.ok) throw new Error(taskState.detail || "合成任务查询失败。");
+    const latestLog = (taskState.logs || []).at(-1);
+    if (latestLog) elements.composeStatus.textContent = latestLog;
+    if (taskState.state === "succeeded") {
+      applyResult(taskState.result);
+      elements.composeStatus.textContent = "总体视频合成完成，已切换到总体视频预览。";
+      return;
+    }
+    if (taskState.state === "failed") throw new Error(taskState.error || "总体视频合成失败。");
+    await new Promise((resolve) => setTimeout(resolve, 1200));
+  }
 }
 
 async function loadRootFolder() {
@@ -626,13 +701,14 @@ function formatFileSize(bytes) {
 
 function autoLoadFirstSegmentVideo(segments) {
   if (!elements.videoPlayer || elements.videoPlayer.getAttribute("src")) return;
-  const firstPlayable = (segments || []).find((segment) => segment.video_path);
+  const firstPlayable = (segments || []).find((segment) => segment.preview_video_path || segment.video_path);
   if (!firstPlayable) return;
   selectedSegmentId = firstPlayable.id || selectedSegmentId;
   updateAnnotationSelection(null);
-  playVideoPath(firstPlayable.video_path, appendLog);
+  updateSegmentPreviewControls(firstPlayable);
+  playVideoPath(firstPlayable.preview_video_path || firstPlayable.video_path, appendLog);
   if (elements.workflowVideoPlayer) {
-    const videoUrl = `${API_BASE}/video?path=${encodeURIComponent(firstPlayable.video_path)}&t=${Date.now()}`;
+    const videoUrl = `${API_BASE}/video?path=${encodeURIComponent(firstPlayable.preview_video_path || firstPlayable.video_path)}&t=${Date.now()}`;
     loadVideo(elements.workflowVideoPlayer, videoUrl, appendWorkflowLog);
   }
   renderSegments(segments, null);
@@ -885,6 +961,36 @@ elements.replayBtn.addEventListener("click", () => {
   elements.videoPlayer.play();
 });
 
+if (elements.originalSegmentPreviewBtn) {
+  elements.originalSegmentPreviewBtn.addEventListener("click", () => {
+    const path = elements.originalSegmentPreviewBtn.dataset.videoPath;
+    if (path) playVideoPath(path, appendLog);
+  });
+}
+
+if (elements.correctedSegmentPreviewBtn) {
+  elements.correctedSegmentPreviewBtn.addEventListener("click", () => {
+    const path = elements.correctedSegmentPreviewBtn.dataset.videoPath;
+    if (path) playVideoPath(path, appendLog);
+  });
+}
+
+if (elements.overallPreviewBtn) {
+  elements.overallPreviewBtn.addEventListener("click", () => {
+    const path = elements.overallPreviewBtn.dataset.videoPath;
+    if (path) playVideoPath(path, appendLog);
+  });
+}
+
+if (elements.composeOverallBtn) {
+  elements.composeOverallBtn.addEventListener("click", () => {
+    submitManualComposition().catch((error) => {
+      elements.composeStatus.textContent = `总体视频合成失败：${error.message}`;
+      updateCompositionControls(lastQuickResult || {});
+    });
+  });
+}
+
 if (elements.sendSegmentAnnotationBtn) {
   elements.sendSegmentAnnotationBtn.addEventListener("click", async () => {
     try {
@@ -1015,6 +1121,7 @@ elements.generateBtn.addEventListener("click", async () => {
   elements.projectFileList.innerHTML = "";
   elements.projectFileContent.textContent = "生成任务创建后将在这里显示项目文件。";
   currentProjectDir = "";
+  lastQuickResult = null;
   if (elements.audioStatus) {
     elements.audioStatus.textContent = "配音：正在等待视频生成";
     elements.audioStatus.classList.remove("success", "warning");
@@ -1026,6 +1133,8 @@ elements.generateBtn.addEventListener("click", async () => {
   currentSegments = [];
   selectedSegmentId = "";
   window.annotationEditor?.setProject("", []);
+  updateSegmentPreviewControls(null);
+  updateCompositionControls({});
   updateAnnotationSelection(null);
   if (elements.segmentAnnotationInput) elements.segmentAnnotationInput.value = "";
   if (elements.annotationStatus) elements.annotationStatus.textContent = "不会阻止当前生成任务。";

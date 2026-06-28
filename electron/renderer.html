@@ -144,11 +144,16 @@
           </section>
           <div class="player-actions">
             <button id="replayBtn" class="secondary">重播</button>
+            <button id="originalSegmentPreviewBtn" class="secondary" disabled>原始片段预览</button>
+            <button id="correctedSegmentPreviewBtn" class="secondary" disabled>修正片段预览</button>
+            <button id="overallPreviewBtn" class="secondary" disabled>总体视频预览</button>
+            <button id="composeOverallBtn" class="primary" disabled>合成总体视频</button>
             <button id="pauseTaskBtn" class="secondary" disabled>暂停生成</button>
             <button id="resumeTaskBtn" class="secondary" disabled>继续生成</button>
             <button id="rootFolderBtn" class="secondary">根文件夹</button>
             <span id="projectPath">项目：尚未生成</span>
           </div>
+          <div id="composeStatus" class="status-line">总体视频仅在点击“合成总体视频”后生成。</div>
           <section id="rootFolderPanel" class="root-folder-panel hidden">
             <div class="root-folder-header">
               <strong>根文件夹成品</strong>

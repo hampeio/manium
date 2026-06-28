@@ -242,6 +242,30 @@ async def replace_segment_async(
     return {"task_id": task.task_id, "project_dir": str(source_dir), "state": "queued"}
 
 
+@app.post("/compose_project_async")
+async def compose_project_async(project_dir: str = Form(default="")) -> dict[str, object]:
+    """Starts final composition only after an explicit user request."""
+
+    source_dir = Path(project_dir).resolve()
+    if not project_dir or not source_dir.exists() or not source_dir.is_dir():
+        raise HTTPException(status_code=404, detail="Project directory not found.")
+    task = task_registry.create(str(source_dir))
+
+    async def run_job() -> None:
+        task_registry.start(task.task_id)
+        try:
+            result = await generation_service.compose_project(
+                project_dir=source_dir,
+                progress=lambda message: task_registry.log(task.task_id, message),
+            )
+            task_registry.complete(task.task_id, result)
+        except Exception as exc:
+            task_registry.fail(task.task_id, str(exc))
+
+    asyncio.create_task(run_job())
+    return {"task_id": task.task_id, "project_dir": str(source_dir), "state": "queued"}
+
+
 @app.get("/tasks/{task_id}")
 def get_task(task_id: str) -> dict[str, object]:
     task = task_registry.to_dict(task_id)
@@ -419,7 +443,17 @@ def projects_root(root_dir: str = "", include_unfinished: bool = False) -> dict[
 def _finished_project_video(project_dir: Path) -> Path | None:
     """Selects the user-facing final video and excludes Manim cache artifacts."""
 
+    summary_path = project_dir / "final_summary.json"
+    if summary_path.exists():
+        try:
+            summary = json.loads(summary_path.read_text(encoding="utf-8", errors="replace"))
+            if summary.get("compose_status") in {"awaiting_user", "stale"}:
+                return None
+        except json.JSONDecodeError:
+            pass
+
     candidates = [
+        project_dir / "outputs" / "final" / "course_final.mp4",
         project_dir / "outputs" / "animation_with_audio.mp4",
         project_dir / "outputs" / "animation.mp4",
         project_dir / "stitched" / "course_final.mp4",

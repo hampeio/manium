@@ -39,6 +39,20 @@ class TTSService:
     def is_configured(self) -> bool:
         return self._fish_configured() or self._xunfei_configured()
 
+    def synthesize_segment_audio(self, text: str, output_path: Path) -> TTSResult:
+        """Synthesize one segment narration without concatenating or muxing project media."""
+
+        if not self.is_configured():
+            return TTSResult(enabled=False, status="disabled")
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        if output_path.exists() and output_path.stat().st_size > 0:
+            return TTSResult(enabled=True, audio_path=output_path, status="cached", message="Segment audio reused.")
+        try:
+            self._synthesize_text_with_fallback(text.strip(), output_path)
+            return TTSResult(enabled=True, audio_path=output_path, status="ready", message="Segment audio ready.")
+        except Exception as exc:
+            return TTSResult(enabled=True, status="failed", error=str(exc), message="Segment audio synthesis failed.")
+
     def synthesize_project_audio(
         self,
         *,
