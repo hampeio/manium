@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Manim Teaching Animation Generator</title>
+    <title>Manim 教学动画生成器</title>
     <link rel="stylesheet" href="./styles.css" />
   </head>
   <body>
@@ -116,8 +116,16 @@
             <button id="replayBtn" class="secondary">重播</button>
             <button id="pauseTaskBtn" class="secondary" disabled>暂停生成</button>
             <button id="resumeTaskBtn" class="secondary" disabled>继续生成</button>
+            <button id="rootFolderBtn" class="secondary">根文件夹</button>
             <span id="projectPath">项目：尚未生成</span>
           </div>
+          <section id="rootFolderPanel" class="root-folder-panel hidden">
+            <div class="root-folder-header">
+              <strong>根文件夹成品</strong>
+              <span id="rootFolderPath" class="path-line">正在读取根文件夹...</span>
+            </div>
+            <div id="rootVideoList" class="root-video-list"></div>
+          </section>
           <div id="audioStatus" class="status-line">配音：尚未生成</div>
           <div class="segment-strip">
             <div class="segment-strip-title">三阶段生成</div>
@@ -162,17 +170,17 @@
 
       <main id="workflowView" class="workflow-shell hidden">
         <section class="workflow-toolbar panel">
-          <button id="loadMathTemplateBtn" class="secondary">鏁板妯℃澘</button>
-          <button id="loadImageTemplateBtn" class="secondary">鍥剧墖璁茶В妯℃澘</button>
-          <button id="loadMechanicsTemplateBtn" class="secondary">鍔涘妯℃澘</button>
+          <button id="loadMathTemplateBtn" class="secondary">数学模板</button>
+          <button id="loadImageTemplateBtn" class="secondary">图片讲解模板</button>
+          <button id="loadMechanicsTemplateBtn" class="secondary">力学模板</button>
           <button id="validateWorkflowBtn" class="secondary">验证工作流</button>
           <button id="runWorkflowBtn" class="primary">运行工作流</button>
-          <button id="saveWorkflowBtn" class="secondary">淇濆瓨 JSON</button>
+          <button id="saveWorkflowBtn" class="secondary">保存 JSON</button>
           <label class="file-button secondary">
-            鍔犺浇 JSON
+            加载 JSON
             <input id="loadWorkflowInput" type="file" accept="application/json" />
           </label>
-          <button id="fitWorkflowBtn" class="secondary">閫傞厤瑙嗗浘</button>
+          <button id="fitWorkflowBtn" class="secondary">适配视图</button>
         </section>
 
         <section class="workflow-layout">
@@ -190,21 +198,21 @@
 
           <aside class="workflow-side">
             <section class="panel node-inspector">
-              <div class="panel-title">鍙傛暟闈㈡澘</div>
-              <div id="nodeInspector" class="inspector-empty">璇烽€夋嫨鑺傜偣</div>
+              <div class="panel-title">参数面板</div>
+              <div id="nodeInspector" class="inspector-empty">请选择节点</div>
             </section>
 
             <section class="panel workflow-result">
-              <div class="panel-title">鐢熸垚缁撴灉</div>
+              <div class="panel-title">生成结果</div>
               <video id="workflowVideoPlayer" controls></video>
               <div class="player-actions">
-                <button id="workflowReplayBtn" class="secondary">閲嶆挱</button>
+                <button id="workflowReplayBtn" class="secondary">重播</button>
                 <span id="workflowProjectPath">项目：尚未生成</span>
               </div>
               <div class="tabs compact-tabs">
-                <button class="workflow-result-tab active" data-workflow-result-tab="summary">鎽樿</button>
-                <button class="workflow-result-tab" data-workflow-result-tab="storyboard">鍒嗛暅</button>
-                <button class="workflow-result-tab" data-workflow-result-tab="code">浠ｇ爜</button>
+                <button class="workflow-result-tab active" data-workflow-result-tab="summary">摘要</button>
+                <button class="workflow-result-tab" data-workflow-result-tab="storyboard">分镜</button>
+                <button class="workflow-result-tab" data-workflow-result-tab="code">代码</button>
               </div>
               <pre id="workflowSummaryView" class="workflow-result-view"></pre>
               <pre id="workflowStoryboardView" class="workflow-result-view hidden"></pre>
@@ -227,18 +235,19 @@
             <div class="panel-title">流程提示词</div>
             <p>查看和修改系统提示词、大纲、分镜、代码生成、修复等内部提示词。</p>
           </div>
-          <button id="closePromptPanelBtn" class="secondary">鍏抽棴</button>
+          <button id="closePromptPanelBtn" class="secondary">关闭</button>
         </div>
         <div class="prompt-editor-layout">
           <div id="promptNameList" class="prompt-name-list"></div>
           <div class="prompt-editor-main">
             <label>
-              鎻愮ず璇嶅悕绉?              <input id="promptNameInput" readonly />
+              提示词名称
+              <input id="promptNameInput" readonly />
             </label>
             <textarea id="promptTemplateInput" class="prompt-template-input"></textarea>
             <div class="prompt-editor-actions">
               <button id="savePromptBtn" class="primary">保存提示词</button>
-              <button id="reloadPromptBtn" class="secondary">閲嶆柊璇诲彇</button>
+              <button id="reloadPromptBtn" class="secondary">重新读取</button>
               <span id="promptPanelStatus" class="path-line">等待操作。</span>
             </div>
           </div>

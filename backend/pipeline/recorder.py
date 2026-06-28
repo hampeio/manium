@@ -48,10 +48,10 @@ class PipelineRecorder:
             "target_duration_seconds": target_duration_seconds,
             "quality": quality,
             "compact_timing": compact_timing,
-            "goal": "Generate a Manim teaching animation from the current prompt and optional image.",
+            "goal": "根据当前提示词和可选图片生成 Manim 教学动画。",
         }
         self._write_json(self.project_dir / "problem_frame.json", frame)
-        self.record_event("problem_frame", "info", "Problem frame recorded.", frame)
+        self.record_event("problem_frame", "info", "问题定义已记录。", frame)
         return frame
 
     def start_stage(self, stage: str, message: str, details: dict[str, Any] | None = None) -> None:
@@ -92,7 +92,8 @@ class PipelineRecorder:
         self._manifest["completed_at"] = self._now()
         self._manifest["status"] = status
         self._write_manifest()
-        self.record_event("pipeline", "info", f"Pipeline {status}.")
+        status_text = {"completed": "已完成", "failed": "失败", "stopped": "已停止"}.get(status, status)
+        self.record_event("pipeline", "info", f"生成管线{status_text}。")
 
     def _finish_stage(self, stage: str, status: str, message: str, details: dict[str, Any] | None) -> None:
         duration = None
@@ -133,4 +134,3 @@ class PipelineRecorder:
 
     def _now(self) -> str:
         return datetime.now(timezone.utc).isoformat()
-

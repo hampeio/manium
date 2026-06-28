@@ -5,7 +5,7 @@ const { spawn } = require("child_process");
 
 let backendProcess = null;
 
-app.setName("Manim Teaching Animation Generator");
+app.setName("Manim 教学动画生成器");
 
 async function isBackendReady() {
   try {

@@ -54,7 +54,7 @@ class GenerationService:
         total_duration_seconds = self._clamp_total_duration(total_duration_seconds)
         recorder = PipelineRecorder(project_dir)
         try:
-            emit("Stage 1/3: preparing outline, inputs, and teaching intent.")
+            emit("第一阶段（共三阶段）：正在准备大纲、输入内容和教学意图。")
             recorder.start_stage("prepare", "Preparing inputs and project frame.")
             image_context = await self._prepare_image(project_dir, uploaded_image, writer)
             await self._pause_if_requested(pause_checker, emit)
@@ -70,8 +70,8 @@ class GenerationService:
             )
             recorder.complete_stage("prepare", "Inputs prepared.", {"has_image": uploaded_image is not None})
 
-            emit(f"Target total duration: {total_duration_seconds} seconds.")
-            emit("Stage 1/3: calling model once for outline, duration, and AI call count.")
+            emit(f"目标总时长：{total_duration_seconds} 秒。")
+            emit("第一阶段（共三阶段）：正在调用模型生成大纲、时长规划和调用次数。")
             recorder.start_stage("outline", "Calling model for outline and generation strategy.")
             strategy = await model_router.plan_generation_strategy(
                 user_prompt,
@@ -82,7 +82,7 @@ class GenerationService:
             )
             strategy = self._normalize_strategy(strategy, total_duration_seconds, preferred_scene_count)
             writer.write_json(project_dir, "generation_strategy.json", strategy.model_dump())
-            emit(f"Outline ready. Planned AI calls: {strategy.ai_call_count}; storyboard batches: {len(strategy.batches)}.")
+            emit(f"大纲已完成。计划调用模型 {strategy.ai_call_count} 次，分镜批次 {len(strategy.batches)} 个。")
             recorder.complete_stage(
                 "outline",
                 "Generation strategy ready.",
@@ -90,11 +90,11 @@ class GenerationService:
             )
             await self._pause_if_requested(pause_checker, emit)
 
-            emit("Stage 2/3: generating fine-grained storyboard batches from outline.")
+            emit("第二阶段（共三阶段）：正在根据大纲生成细化分镜。")
             recorder.start_stage("storyboard", "Generating storyboard batches.")
             scenes: list[StoryboardScene] = []
             for batch in strategy.batches:
-                emit(f"Storyboard batch {batch.batch_index}/{len(strategy.batches)}: {batch.title}")
+                emit(f"分镜批次 {batch.batch_index}/{len(strategy.batches)}：{batch.title}")
                 recorder.record_event(
                     "storyboard",
                     "info",
@@ -119,12 +119,12 @@ class GenerationService:
                 code_plan=strategy.code_plan,
             )
             if compact_timing:
-                emit("Compact timing mode enabled: reducing blank waits between storyboard beats.")
+                emit("已启用紧凑节奏：正在减少分镜之间的空白等待。")
                 plan.code_plan = (
                     f"{plan.code_plan}\n"
                     "COMPACT_TIMING: compact timing mode; avoid long blank waits; keep each wait near 2-4 seconds."
                 )
-            emit(f"Storyboard ready: {len(plan.scenes)} fine-grained scenes.")
+            emit(f"分镜已完成：共 {len(plan.scenes)} 个细化片段。")
             recorder.complete_stage("storyboard", "Storyboard ready.", {"scene_count": len(plan.scenes)})
 
             visual_design = self._build_visual_design_guidance(plan)
@@ -153,7 +153,7 @@ class GenerationService:
                     }
                 )
 
-            emit("Stage 2/3: generating and rendering segmented Manim course.")
+            emit("第二阶段（共三阶段）：正在生成并渲染分段 Manim 课程。")
             recorder.start_stage("render_course", "Generating Manim code and rendering course.")
             generated, final_result, segment_outputs = await self._render_segmented_or_single(
                 project_dir=project_dir,
@@ -171,10 +171,10 @@ class GenerationService:
                 recorder.complete_stage("render_course", "Course render completed.", {"segments": len(segment_outputs)})
             else:
                 recorder.fail_stage("render_course", "Course render failed.", {"segments": len(segment_outputs)})
-            emit("AI input/output traces saved.")
+            emit("模型输入与输出记录已保存。")
             await self._pause_if_requested(pause_checker, emit)
 
-            emit("Stage 3/3: stitching/exporting final video and writing summary.")
+            emit("第三阶段（共三阶段）：正在拼接、导出最终视频并写入结果摘要。")
             recorder.start_stage("export", "Writing summary and optional narration.")
             await self._pause_if_requested(pause_checker, emit)
             summary = self._build_summary(project_dir, generated, final_result, writer)
@@ -217,7 +217,7 @@ class GenerationService:
         plan_path = project_dir / "teaching_plan.json"
         manifest_path = project_dir / "segment_manifest.json"
         if not plan_path.exists() or not manifest_path.exists():
-            raise FileNotFoundError("Project does not contain teaching_plan.json or segment_manifest.json.")
+            raise FileNotFoundError("项目中缺少教学计划或片段清单。")
 
         plan_data = json.loads(plan_path.read_text(encoding="utf-8", errors="replace"))
         plan = TeachingPlan.model_validate(plan_data)
@@ -225,12 +225,12 @@ class GenerationService:
         segments = manifest.get("segments", [])
         target = next((segment for segment in segments if str(segment.get("id")) == segment_id), None)
         if not target:
-            raise ValueError(f"Segment not found: {segment_id}")
+            raise ValueError(f"找不到片段：{segment_id}")
 
         scene_indexes = [int(value) for value in target.get("scene_indexes", [])] or [int(str(segment_id).split("_")[-1])]
         scenes = [scene for scene in plan.scenes if scene.index in scene_indexes]
         if not scenes:
-            raise ValueError("No storyboard scenes matched the selected segment.")
+            raise ValueError("选中的片段没有匹配到分镜。")
 
         revised_index = len(list((project_dir / "segments").glob("replacement_*"))) + 1
         segment_dir = project_dir / "segments" / f"replacement_{revised_index:02d}_{segment_id}"
@@ -249,7 +249,7 @@ class GenerationService:
             ),
         )
         segment_duration = max(1, round(sum(scene.estimated_seconds for scene in scenes)))
-        emit(f"Replacing {segment_id}: generating revised Manim code.")
+        emit(f"正在修改 {segment_id}：生成新版 Manim 代码。")
         code = await model_router.generate_code_for_segment(
             segment_plan,
             segment_index=int(target.get("segment") or 1),
@@ -259,7 +259,7 @@ class GenerationService:
         code = sanitize_manim_code(code)
         scene_file = writer.write_text(segment_dir, "scene.py", code)
         writer.write_text(segment_dir, "original_manim_code.py", code)
-        emit(f"Replacing {segment_id}: rendering revised segment.")
+        emit(f"正在修改 {segment_id}：渲染新版片段。")
         result = await self._render_with_repairs(
             segment_dir,
             scene_file,
@@ -272,7 +272,7 @@ class GenerationService:
             None,
         )
         if not result.success or not result.video_path:
-            raise RuntimeError(result.stderr or result.stdout or "Segment replacement render failed.")
+            raise RuntimeError(result.stderr or result.stdout or "片段替换渲染失败。")
 
         for item in segments:
             if str(item.get("id")) == segment_id:
@@ -318,7 +318,7 @@ class GenerationService:
         if not pause_checker:
             return
         if pause_checker():
-            emit("Task paused. Waiting for resume.")
+            emit("任务已暂停，正在等待继续。")
         while pause_checker():
             await asyncio.sleep(0.5)
 
@@ -476,7 +476,7 @@ class GenerationService:
         segment_outputs: list[dict[str, object]] = []
         segment_codes: list[str] = []
         segment_videos: list[Path] = []
-        emit(f"Segmented rendering enabled: {len(segments)} parts, one video per storyboard scene.")
+        emit(f"已启用分段渲染：共 {len(segments)} 段，每个分镜单独生成视频。")
         for index, scenes in enumerate(segments, start=1):
             segment_duration = max(1, round(sum(scene.estimated_seconds for scene in scenes)))
             segment_dir = project_dir / "segments" / f"part_{index:02d}"
@@ -490,7 +490,7 @@ class GenerationService:
                 code_plan=plan.code_plan,
             )
             writer.write_json(project_dir, f"segments/part_{index:02d}/storyboard.json", [scene.model_dump() for scene in scenes])
-            emit(f"Segment {index}/{len(segments)}: generating Manim code for {len(scenes)} storyboard beat.")
+            emit(f"片段 {index}/{len(segments)}：正在为 {len(scenes)} 个分镜生成 Manim 代码。")
             if recorder:
                 recorder.record_event("codegen", "info", "Generating segment Manim code.", {"segment": index, "scene_count": len(scenes)})
             code = await model_router.generate_code_for_segment(
@@ -508,7 +508,7 @@ class GenerationService:
                 diversity_check.to_dict(),
             )
             if not diversity_check.success:
-                emit(f"Segment {index}/{len(segments)}: visual repetition detected; rewriting this segment once.")
+                emit(f"片段 {index}/{len(segments)}：检测到视觉重复，正在重写当前片段。")
                 if recorder:
                     recorder.record_event(
                         "visual_guard",
@@ -535,11 +535,11 @@ class GenerationService:
                     diversity_check.to_dict(),
                 )
                 if not diversity_check.success:
-                    emit(f"Segment {index}/{len(segments)}: rewrite is still visually similar; render continues with a warning.")
+                    emit(f"片段 {index}/{len(segments)}：重写后仍较为相似，将记录警告并继续渲染。")
             segment_codes.append(f"# Segment {index}\n{code}")
             scene_file = writer.write_text(project_dir, f"segments/part_{index:02d}/scene.py", code)
             writer.write_text(project_dir, f"segments/part_{index:02d}/original_manim_code.py", code)
-            emit(f"Segment {index}/{len(segments)}: rendering.")
+            emit(f"片段 {index}/{len(segments)}：正在渲染。")
             result = await self._render_with_repairs(
                 segment_dir,
                 scene_file,
@@ -566,7 +566,7 @@ class GenerationService:
             }
             segment_outputs.append(output)
             if not result.success or not result.video_path:
-                emit(f"Segment {index} failed. Keeping existing successful previews; no full-video fallback will be used.")
+                emit(f"片段 {index} 失败。已保留成功片段的预览，不使用整片后备视频。")
                 failed = RenderResult(False, result.stdout, result.stderr or f"Segment {index} failed.", None, result.command)
                 return GeneratedAnimation(plan=plan, manim_code="\n\n".join(segment_codes)), failed, segment_outputs
             segment_videos.append(result.video_path)
@@ -582,7 +582,7 @@ class GenerationService:
         if recorder:
             recorder.record_event("stitch", "info", "Segment stitching finished.", {"success": stitched.success, "video_count": len(segment_videos)})
         if not stitched.success:
-            emit("Video stitching failed. Keeping rendered segment previews; no full-video fallback will be used.")
+            emit("视频拼接失败。已保留分段预览，不使用整片后备视频。")
             self._write_live_segment_manifest(project_dir, plan, total_duration_seconds, segment_outputs, None, writer)
             if partial_update:
                 partial_update(self._build_partial_result(project_dir, plan, total_duration_seconds, segment_outputs, None))
@@ -603,14 +603,14 @@ class GenerationService:
         total_duration_seconds: int,
         recorder: PipelineRecorder | None = None,
     ) -> tuple[GeneratedAnimation, RenderResult, list[dict[str, object]]]:
-        emit("Generating one full Manim source file.")
+        emit("正在生成完整的 Manim 源文件。")
         if recorder:
             recorder.record_event("codegen", "info", "Generating single Manim source.", {"scene_count": len(plan.scenes)})
         manim_code = await model_router.generate_code_from_plan(plan, total_duration_seconds)
         generated = GeneratedAnimation(plan=plan, manim_code=sanitize_manim_code(manim_code))
         scene_file = writer.write_text(project_dir, "scene.py", generated.manim_code)
         writer.write_text(project_dir, "original_manim_code.py", generated.manim_code)
-        emit("Rendering single Manim video.")
+        emit("正在渲染单个 Manim 视频。")
         result = await self._render_with_repairs(
             project_dir,
             scene_file,
@@ -661,7 +661,7 @@ class GenerationService:
         list_file.write_text("\n".join(list_lines), encoding="utf-8")
         output = stitch_dir / "course_final.mp4"
         command = [self._ffmpeg_exe(), "-y", "-f", "concat", "-safe", "0", "-i", "concat_list.txt", "-c", "copy", "course_final.mp4"]
-        emit("Stitching rendered segments with ffmpeg.")
+        emit("正在使用 ffmpeg 拼接已渲染片段。")
         try:
             process = await asyncio.create_subprocess_exec(
                 *command,
@@ -741,27 +741,27 @@ class GenerationService:
         result = await self._render_checked(project_dir, scene_file, quality, writer, "0", recorder, generated.plan)
         self.renderer.save_log(project_dir / "logs" / "render_attempt_0.json", result)
         if result.success:
-            emit("Initial render succeeded.")
+            emit("首次渲染成功。")
             if recorder:
                 recorder.record_event("render", "info", "Initial render succeeded.", {"project_dir": project_dir})
             return result
         if result.environment_error:
-            emit("Render failed because the local Manim environment is not ready. Skipping model repair.")
+            emit("本地 Manim 环境未就绪，渲染失败；已跳过模型修复。")
             if recorder:
                 recorder.record_event("render", "error", "Render environment is not ready.", {"project_dir": project_dir})
             return result
 
-        emit("Initial render failed. Starting repair loop.")
+        emit("首次渲染失败，开始自动修复。")
         if recorder:
             recorder.record_event("repair", "info", "Initial render failed; entering repair loop.", {"project_dir": project_dir})
         for round_index in range(1, self.settings.max_repair_rounds + 1):
-            emit(f"Repair round {round_index}: asking model to fix Manim code.")
+            emit(f"自动修复第 {round_index} 轮：正在请求模型修复 Manim 代码。")
             repair_dir = project_dir / "repairs" / f"round_{round_index}"
             repair_dir.mkdir(parents=True, exist_ok=True)
             writer.write_text(project_dir, f"repairs/round_{round_index}/before.py", current_code)
             error_log = result.stderr + "\n" + result.stdout
             repair = await model_router.repair_code(self._repair_goal_context(generated.plan), current_code, error_log)
-            emit(f"Repair round {round_index}: AI input/output trace saved.")
+            emit(f"自动修复第 {round_index} 轮：模型输入与输出记录已保存。")
             current_code = repair.repaired_code
             current_code = sanitize_manim_code(current_code)
             writer.write_text(project_dir, f"repairs/round_{round_index}/after.py", current_code)
@@ -769,16 +769,16 @@ class GenerationService:
             writer.write_json(project_dir, f"repairs/round_{round_index}/summary.json", {"round": round_index, "notes": repair.notes})
             scene_file.write_text(current_code, encoding="utf-8")
 
-            emit(f"Repair round {round_index}: rendering repaired code.")
+            emit(f"自动修复第 {round_index} 轮：正在渲染修复后的代码。")
             result = await self._render_checked(project_dir, scene_file, quality, writer, str(round_index), recorder, generated.plan)
             self.renderer.save_log(project_dir / "logs" / f"render_attempt_{round_index}.json", result)
             if result.success:
-                emit(f"Repair round {round_index} succeeded.")
+                emit(f"自动修复第 {round_index} 轮成功。")
                 if recorder:
                     recorder.record_event("repair", "info", "Repair round succeeded.", {"round": round_index})
                 return result
 
-        emit("Repair limit reached. Rendering simplified fallback.")
+        emit("已达到自动修复次数上限，正在渲染简化后备版本。")
         fallback = await model_router.repair_code(self._repair_goal_context(generated.plan), "Create a minimal runnable version.", "The first three repair rounds failed.")
         fallback_code = sanitize_manim_code(fallback.repaired_code)
         scene_file.write_text(fallback_code, encoding="utf-8")
@@ -844,7 +844,7 @@ class GenerationService:
             summary["tts_message"] = "\u914d\u97f3\u672a\u542f\u7528\u3002"
             return
 
-        emit("?????????????????")
+        emit("正在生成中文语音片段。")
         video_path_value = summary.get("video_path")
         video_path = Path(str(video_path_value)) if video_path_value else None
         result = await asyncio.to_thread(
@@ -864,13 +864,13 @@ class GenerationService:
         summary["tts_message"] = result.message
         if result.muxed_video_path and result.muxed_video_path.exists():
             summary["video_path"] = str(result.muxed_video_path.resolve())
-            emit("???????????????")
+            emit("配音已生成并嵌入视频。")
         elif result.error:
             summary["tts_error"] = result.error
             if result.audio_path:
-                emit("?????????????????????????")
+                emit("配音已生成，但未能嵌入视频；已保留静音视频。")
             else:
-                emit("??????????????????? logs/tts_error.log?")
+                emit("配音生成失败，详细信息已写入 logs/tts_error.log。")
 
     def _write_stage_manifest(
         self,

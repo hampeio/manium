@@ -25,6 +25,10 @@ const elements = {
   replayBtn: document.getElementById("replayBtn"),
   pauseTaskBtn: document.getElementById("pauseTaskBtn"),
   resumeTaskBtn: document.getElementById("resumeTaskBtn"),
+  rootFolderBtn: document.getElementById("rootFolderBtn"),
+  rootFolderPanel: document.getElementById("rootFolderPanel"),
+  rootFolderPath: document.getElementById("rootFolderPath"),
+  rootVideoList: document.getElementById("rootVideoList"),
   stagePreviewList: document.getElementById("stagePreviewList"),
   segmentPreviewList: document.getElementById("segmentPreviewList"),
   audioPreviewList: document.getElementById("audioPreviewList"),
@@ -91,6 +95,7 @@ let editHistory = [];
 let promptTemplates = {};
 let selectedPromptName = "";
 let selectedSegmentId = "";
+let currentRootDir = "";
 
 const categoryLabels = {
   input: "输入",
@@ -119,6 +124,38 @@ const nodeTypeLabels = {
   PreviewNode: "预览",
   CommentNode: "注释",
 };
+
+const promptNameLabels = {
+  SYSTEM_PROMPT: "系统提示词",
+  PLAN_AND_CODE_PROMPT: "规划与代码提示词",
+  GENERATION_STRATEGY_PROMPT: "生成策略提示词",
+  STORYBOARD_BATCH_PROMPT: "分镜批次提示词",
+  CODE_FROM_PLAN_PROMPT: "完整代码生成提示词",
+  SEGMENT_CODE_PROMPT: "片段代码生成提示词",
+  REPAIR_PROMPT: "自动修复提示词"
+};
+
+const statusLabels = {
+  idle: "等待",
+  planned: "已规划",
+  queued: "排队中",
+  running: "进行中",
+  rendered: "已渲染",
+  replaced: "已替换",
+  success: "成功",
+  succeeded: "成功",
+  completed: "已完成",
+  failed: "失败",
+  skipped: "已跳过",
+  stopped: "已停止",
+  paused: "已暂停",
+  stitched: "已拼接",
+  pending: "等待中"
+};
+
+function statusLabel(status) {
+  return statusLabels[status] || status || "未知状态";
+}
 
 function applyDefaultTestSettings() {
   if (!elements.promptInput.value.trim()) {
@@ -175,7 +212,7 @@ async function loadPromptTemplates() {
 function renderPromptTemplateList() {
   if (!elements.promptNameList) return;
   elements.promptNameList.innerHTML = Object.keys(promptTemplates).map((name) => `
-    <button class="prompt-name-item ${name === selectedPromptName ? "active" : ""}" data-prompt-name="${escapeHtml(name)}">${escapeHtml(name)}</button>
+    <button class="prompt-name-item ${name === selectedPromptName ? "active" : ""}" data-prompt-name="${escapeHtml(name)}">${escapeHtml(promptNameLabels[name] || name)}</button>
   `).join("");
   elements.promptNameList.querySelectorAll(".prompt-name-item").forEach((button) => {
     button.addEventListener("click", () => selectPromptTemplate(button.dataset.promptName));
@@ -277,19 +314,19 @@ function applyPartialResult(partial) {
 function renderAudioStatus(result) {
   if (!elements.audioStatus) return;
   const status = result.tts_status || (result.tts_enabled ? "unknown" : "disabled");
-  const audioPath = result.audio_path ? ` ???${result.audio_path}` : "";
+  const audioPath = result.audio_path ? ` 路径：${result.audio_path}` : "";
   elements.audioStatus.classList.remove("success", "warning");
   if (status === "embedded") {
-    elements.audioStatus.textContent = `?????????${audioPath}`;
+    elements.audioStatus.textContent = `配音已嵌入视频。${audioPath}`;
     elements.audioStatus.classList.add("success");
   } else if (status === "not_embedded" || status === "audio_only") {
-    elements.audioStatus.textContent = `???????????????????${audioPath}`;
+    elements.audioStatus.textContent = `配音已生成，但未嵌入视频。${audioPath}`;
     elements.audioStatus.classList.add("warning");
   } else if (status === "failed") {
-    elements.audioStatus.textContent = `??????????????????${result.tts_error || ""}`;
+    elements.audioStatus.textContent = `配音生成失败：${result.tts_error || "未知错误"}`;
     elements.audioStatus.classList.add("warning");
   } else {
-    elements.audioStatus.textContent = "????????????";
+    elements.audioStatus.textContent = "配音：尚未生成";
   }
 }
 
@@ -323,7 +360,7 @@ function renderStages(stages, segments = [], activeStage = 1) {
     return `
       <button class="${classes.join(" ")}" data-stage="${stageNumber}">
         <strong>${escapeHtml(stage.title || `第 ${stageNumber} 阶段`)}</strong>
-        <span>${escapeHtml(stage.status || "planned")} · ${stage.estimated_seconds || ""}s · ${sceneCount} 个分镜${stitching}</span>
+        <span>${escapeHtml(statusLabel(stage.status || "planned"))} · ${stage.estimated_seconds || ""} 秒 · ${sceneCount} 个分镜${stitching}</span>
       </button>
     `;
   }).join("");
@@ -522,6 +559,60 @@ function playVideoPath(videoPath, logger) {
   loadVideo(elements.videoPlayer, videoUrl, logger);
 }
 
+async function loadRootFolder() {
+  if (!elements.rootFolderPanel || !elements.rootVideoList) return;
+  elements.rootFolderPanel.classList.remove("hidden");
+  elements.rootVideoList.innerHTML = '<div class="path-line">正在加载成品视频...</div>';
+  const requestedRoot = selectedOutputDir || "";
+  const response = await fetch(`${API_BASE}/projects/root?root_dir=${encodeURIComponent(requestedRoot)}`);
+  const payload = await response.json();
+  if (!response.ok) throw new Error(payload.detail || "根文件夹读取失败。");
+  currentRootDir = payload.root_dir || requestedRoot;
+  elements.rootFolderPath.textContent = currentRootDir;
+  renderRootVideos(payload.projects || []);
+}
+
+function renderRootVideos(projects) {
+  if (!elements.rootVideoList) return;
+  if (!projects.length) {
+    elements.rootVideoList.innerHTML = '<div class="root-folder-empty">根文件夹中暂无已完成的视频。</div>';
+    return;
+  }
+  elements.rootVideoList.innerHTML = projects.map((project) => `
+    <button class="root-video-item" data-project-dir="${escapeHtml(project.project_dir)}">
+      <span class="root-video-title">${escapeHtml(project.title || project.name || "未命名项目")}</span>
+      <span class="root-video-meta">${escapeHtml(project.name || "")} · ${formatFileSize(project.size || 0)}</span>
+    </button>
+  `).join("");
+  elements.rootVideoList.querySelectorAll(".root-video-item").forEach((button) => {
+    button.addEventListener("click", async () => {
+      elements.rootVideoList.querySelectorAll(".root-video-item").forEach((item) => item.classList.remove("active"));
+      button.classList.add("active");
+      await switchToRootProject(button.dataset.projectDir);
+    });
+  });
+}
+
+async function switchToRootProject(projectDir) {
+  elements.projectPath.textContent = `项目：正在加载 ${projectDir}`;
+  const response = await fetch(`${API_BASE}/project/status?project_dir=${encodeURIComponent(projectDir)}`);
+  const payload = await response.json();
+  if (!response.ok) throw new Error(payload.detail || "项目内容加载失败。");
+  const result = {
+    ...(payload.summary || {}),
+    project_dir: payload.project_dir,
+    stages: payload.stages || [],
+    segments: payload.segments || []
+  };
+  applyResult(result);
+  appendLog(`已切换到根文件夹项目：${projectDir}`);
+}
+
+function formatFileSize(bytes) {
+  if (!bytes) return "0 MB";
+  return `${(Number(bytes) / 1024 / 1024).toFixed(1)} MB`;
+}
+
 function autoLoadFirstSegmentVideo(segments) {
   if (!elements.videoPlayer || elements.videoPlayer.getAttribute("src")) return;
   const firstPlayable = (segments || []).find((segment) => segment.video_path);
@@ -710,6 +801,16 @@ elements.resumeTaskBtn.addEventListener("click", async () => {
   appendLog("已继续生成。");
 });
 
+if (elements.rootFolderBtn) {
+  elements.rootFolderBtn.addEventListener("click", () => {
+    loadRootFolder().catch((error) => {
+      elements.rootFolderPanel?.classList.remove("hidden");
+      if (elements.rootVideoList) elements.rootVideoList.innerHTML = `<div class="root-folder-empty">加载失败：${escapeHtml(error.message)}</div>`;
+      appendLog(`根文件夹加载失败：${error.message}`);
+    });
+  });
+}
+
 elements.workflowReplayBtn.addEventListener("click", () => {
   elements.workflowVideoPlayer.currentTime = 0;
   elements.workflowVideoPlayer.play();
@@ -785,11 +886,11 @@ elements.generateBtn.addEventListener("click", async () => {
   elements.projectFileList.innerHTML = "";
   elements.projectFileContent.textContent = "";
   if (elements.audioStatus) {
-    elements.audioStatus.textContent = "???????";
+    elements.audioStatus.textContent = "配音：正在等待视频生成";
     elements.audioStatus.classList.remove("success", "warning");
   }
   if (elements.applyEditBtn) elements.applyEditBtn.disabled = true;
-  if (elements.editStatus) elements.editStatus.textContent = "?????????????";
+  if (elements.editStatus) elements.editStatus.textContent = "视频生成完成后可提交修改要求。";
   const totalDurationSeconds = selectedTotalDurationSeconds();
   currentStages = buildDefaultStages(totalDurationSeconds);
   currentSegments = [];
@@ -935,7 +1036,7 @@ function renderNodeLibrary(definitions) {
 async function loadWorkflowTemplate(templateId) {
   const response = await fetch(`${API_BASE}/workflow/templates/${templateId}`);
   const loaded = await response.json();
-  if (!response.ok) throw new Error(loaded.detail || "Template load failed.");
+  if (!response.ok) throw new Error(loaded.detail || "模板加载失败。");
   workflow = loaded;
   selectedNodeId = null;
   pendingConnection = null;
@@ -975,7 +1076,7 @@ function renderWorkflow() {
     nodeEl.innerHTML = `
       <div class="workflow-node-header">
         <span class="workflow-node-title">${node.label || labelForNode(definition)}</span>
-        <span class="workflow-node-status">${node.status || "idle"}</span>
+        <span class="workflow-node-status">${statusLabel(node.status || "idle")}</span>
       </div>
       <div class="workflow-node-body">
         <div class="port-list">
@@ -1156,8 +1257,8 @@ async function validateWorkflow() {
   });
   const result = await response.json();
   appendWorkflowLog(result.valid ? "工作流验证通过。" : "工作流验证失败。");
-  (result.issues || []).forEach((issue) => appendWorkflowLog(`${issue.severity}: ${issue.message}`));
-  if (result.execution_order?.length) appendWorkflowLog(`执行顺序：${result.execution_order.join(" -> ")}`);
+  (result.issues || []).forEach((issue) => appendWorkflowLog(`${statusLabel(issue.severity)}：${issue.message}`));
+  if (result.execution_order?.length) appendWorkflowLog(`执行顺序：${result.execution_order.join(" → ")}`);
   return result.valid;
 }
 

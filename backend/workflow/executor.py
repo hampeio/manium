@@ -23,9 +23,9 @@ class WorkflowExecutor:
         (workflow_dir / "workflow.json").write_text(workflow.model_dump_json(indent=2), encoding="utf-8")
         (workflow_dir / "validation.json").write_text(validation.model_dump_json(indent=2), encoding="utf-8")
         if not validation.valid:
-            raise ValueError("Workflow validation failed: " + "; ".join(issue.message for issue in validation.issues))
+            raise ValueError("工作流验证失败：" + "；".join(issue.message for issue in validation.issues))
 
-        emit("Workflow DAG validated.")
+        emit("工作流有向无环图验证通过。")
         for node_id in validation.execution_order:
             node = next(node for node in workflow.nodes if node.id == node_id)
             node_dir = project_dir / "workflow_outputs" / node.id
@@ -35,7 +35,7 @@ class WorkflowExecutor:
             (node_dir / "output.json").write_text(json.dumps({"status": "scheduled", "node_type": node.type}, ensure_ascii=False, indent=2), encoding="utf-8")
 
         prompt = _first_param(workflow, "PromptInputNode", "prompt") or "Explain vector projection with a simple diagram."
-        emit("Delegating workflow execution to generation pipeline.")
+        emit("正在将工作流交给生成管线执行。")
         result = await self.generation_service.run(
             project_dir=project_dir,
             user_prompt=prompt,

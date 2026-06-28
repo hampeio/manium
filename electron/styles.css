@@ -140,6 +140,61 @@ p {
   margin-top: 12px;
 }
 
+.root-folder-panel {
+  border-top: 1px solid var(--border);
+  padding: 12px 0 4px;
+}
+
+.root-folder-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.root-folder-header .path-line {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.root-video-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
+  gap: 8px;
+  max-height: 210px;
+  overflow-y: auto;
+}
+
+.root-video-item {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+  padding: 10px;
+  text-align: left;
+  border: 1px solid var(--border);
+  background: #0f1b2e;
+}
+
+.root-video-item.active {
+  border-color: var(--accent);
+  background: #12243b;
+}
+
+.root-video-title,
+.root-video-meta {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.root-video-meta,
+.root-folder-empty {
+  color: var(--muted);
+  font-size: 12px;
+}
+
 .segment-strip {
   margin-top: 12px;
   border-top: 1px solid var(--line);

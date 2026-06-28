@@ -33,16 +33,16 @@ class TaskRegistry:
         task = TaskRecord(task_id=uuid4().hex, project_dir=project_dir)
         with self._lock:
             self._tasks[task.task_id] = task
-        self.log(task.task_id, "Task queued.")
+        self.log(task.task_id, "任务已进入队列。")
         return task
 
     def start(self, task_id: str) -> None:
         self._update(task_id, state="running")
-        self.log(task_id, "Task started.")
+        self.log(task_id, "任务已开始。")
 
     def complete(self, task_id: str, result: dict[str, object]) -> None:
         self._update(task_id, state="succeeded", result=result)
-        self.log(task_id, "Task completed.")
+        self.log(task_id, "任务已完成。")
 
     def update_partial(self, task_id: str, partial: dict[str, object]) -> None:
         with self._lock:
@@ -54,7 +54,7 @@ class TaskRegistry:
 
     def fail(self, task_id: str, error: str) -> None:
         self._update(task_id, state="failed", error=error)
-        self.log(task_id, f"Task failed: {error}")
+        self.log(task_id, f"任务失败：{error}")
 
     def pause(self, task_id: str) -> bool:
         with self._lock:
@@ -64,7 +64,7 @@ class TaskRegistry:
             task.pause_requested = True
             task.state = "paused"
             task.updated_at = datetime.now().isoformat(timespec="seconds")
-        self.log(task_id, "Task pause requested.")
+        self.log(task_id, "已请求暂停任务。")
         return True
 
     def resume(self, task_id: str) -> bool:
@@ -75,7 +75,7 @@ class TaskRegistry:
             task.pause_requested = False
             task.state = "running"
             task.updated_at = datetime.now().isoformat(timespec="seconds")
-        self.log(task_id, "Task resumed.")
+        self.log(task_id, "任务已继续。")
         return True
 
     def is_pause_requested(self, task_id: str) -> bool:
