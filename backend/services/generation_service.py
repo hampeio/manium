@@ -13,7 +13,7 @@ from backend.pipeline.recorder import PipelineRecorder
 from backend.rendering.code_sanitizer import sanitize_manim_code
 from backend.rendering.manim_renderer import ManimRenderer, RenderResult
 from backend.rendering.static_checker import run_static_check
-from backend.rendering.visual_guard import run_visual_consistency_check
+from backend.rendering.visual_guard import run_segment_diversity_check, run_visual_consistency_check
 from backend.services.project_manager import ProjectManager
 from backend.services.subtitle_service import build_subtitles
 from backend.services.tts_service import TTSService
@@ -500,6 +500,42 @@ class GenerationService:
                 segment_duration_seconds=segment_duration,
             )
             code = sanitize_manim_code(code)
+            previous_codes = [item.split("\n", 1)[-1] for item in segment_codes]
+            diversity_check = run_segment_diversity_check(code, previous_codes)
+            writer.write_json(
+                project_dir,
+                f"segments/part_{index:02d}/logs/segment_diversity_initial.json",
+                diversity_check.to_dict(),
+            )
+            if not diversity_check.success:
+                emit(f"Segment {index}/{len(segments)}: visual repetition detected; rewriting this segment once.")
+                if recorder:
+                    recorder.record_event(
+                        "visual_guard",
+                        "warning",
+                        "Segment visual structure was too similar or contained placeholder content.",
+                        {"segment": index, **diversity_check.to_dict()},
+                    )
+                writer.write_text(project_dir, f"segments/part_{index:02d}/repairs/diversity_before.py", code)
+                repair = await model_router.repair_code(
+                    self._repair_goal_context(segment_plan),
+                    code,
+                    (
+                        diversity_check.error
+                        + "\n只重写当前片段。严格实现当前 visual_plan，改变主要图形对象、空间布局和动画动作；"
+                        "不能只改标题或标签，不能添加完成提示、占位卡片或流程自述。"
+                    ),
+                )
+                code = sanitize_manim_code(repair.repaired_code)
+                writer.write_text(project_dir, f"segments/part_{index:02d}/repairs/diversity_after.py", code)
+                diversity_check = run_segment_diversity_check(code, previous_codes)
+                writer.write_json(
+                    project_dir,
+                    f"segments/part_{index:02d}/logs/segment_diversity_after_rewrite.json",
+                    diversity_check.to_dict(),
+                )
+                if not diversity_check.success:
+                    emit(f"Segment {index}/{len(segments)}: rewrite is still visually similar; render continues with a warning.")
             segment_codes.append(f"# Segment {index}\n{code}")
             scene_file = writer.write_text(project_dir, f"segments/part_{index:02d}/scene.py", code)
             writer.write_text(project_dir, f"segments/part_{index:02d}/original_manim_code.py", code)

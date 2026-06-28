@@ -1,4 +1,6 @@
+import ast
 from dataclasses import asdict, dataclass
+from difflib import SequenceMatcher
 from pathlib import Path
 
 from backend.ai.schemas import TeachingPlan
@@ -11,6 +13,19 @@ class VisualGuardResult:
     success: bool
     error: str
     checked_path: str
+
+    def to_dict(self) -> dict[str, object]:
+        return asdict(self)
+
+
+@dataclass
+class SegmentDiversityResult:
+    """Detects placeholder endings and near-identical visual programs."""
+
+    success: bool
+    error: str
+    similarity: float = 0.0
+    compared_segment: int | None = None
 
     def to_dict(self) -> dict[str, object]:
         return asdict(self)
@@ -72,6 +87,17 @@ GENERIC_VISUAL_MARKERS = [
     "当前主题驱动的分镜可视化",
 ]
 
+PLACEHOLDER_ENDING_MARKERS = [
+    "segment demo complete",
+    "visuals come from the current plan",
+    "no old assets used",
+    "分镜演示完成",
+    "画面元素来自当前教学计划",
+    "未使用旧主题素材",
+    "占位画面",
+    "placeholder",
+]
+
 
 def run_visual_consistency_check(scene_file: Path, plan: TeachingPlan) -> VisualGuardResult:
     """Blocks obvious stale-topic assets before spending time rendering them."""
@@ -114,6 +140,89 @@ def run_visual_consistency_check(scene_file: Path, plan: TeachingPlan) -> Visual
         )
 
     return VisualGuardResult(True, "", str(scene_file.resolve()))
+
+
+def run_segment_diversity_check(
+    current_code: str,
+    previous_codes: list[str],
+    *,
+    similarity_threshold: float = 0.94,
+) -> SegmentDiversityResult:
+    """Rejects meta placeholders and code that only changes labels between segments."""
+
+    lowered = current_code.lower()
+    placeholder = next((marker for marker in PLACEHOLDER_ENDING_MARKERS if marker.lower() in lowered), None)
+    if placeholder:
+        return SegmentDiversityResult(
+            False,
+            f"当前片段包含占位或自述画面文本：{placeholder}。必须改为继续讲解当前分镜。",
+        )
+
+    current_signature = _visual_ast_signature(current_code)
+    if len(current_signature) < 20:
+        return SegmentDiversityResult(True, "")
+
+    strongest_similarity = 0.0
+    strongest_index: int | None = None
+    for index, previous_code in enumerate(previous_codes, start=1):
+        previous_signature = _visual_ast_signature(previous_code)
+        if len(previous_signature) < 20:
+            continue
+        similarity = SequenceMatcher(None, previous_signature, current_signature, autojunk=False).ratio()
+        if similarity > strongest_similarity:
+            strongest_similarity = similarity
+            strongest_index = index
+
+    if strongest_similarity >= similarity_threshold:
+        return SegmentDiversityResult(
+            False,
+            (
+                f"当前片段与第 {strongest_index} 段的视觉程序结构相似度为 "
+                f"{strongest_similarity:.1%}，疑似只替换文字而复用同一动画。"
+            ),
+            strongest_similarity,
+            strongest_index,
+        )
+    return SegmentDiversityResult(True, "", strongest_similarity, strongest_index)
+
+
+def _visual_ast_signature(code: str) -> list[str]:
+    """Builds a text-insensitive signature from Manim calls and AST structure."""
+
+    try:
+        tree = ast.parse(code)
+    except SyntaxError:
+        return []
+
+    signature: list[str] = []
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Call):
+            signature.append(f"Call:{_call_name(node.func)}:{len(node.args)}:{len(node.keywords)}")
+        elif isinstance(
+            node,
+            (
+                ast.For,
+                ast.While,
+                ast.If,
+                ast.ListComp,
+                ast.FunctionDef,
+                ast.ClassDef,
+                ast.Assign,
+                ast.AugAssign,
+                ast.BinOp,
+                ast.Compare,
+            ),
+        ):
+            signature.append(type(node).__name__)
+    return signature
+
+
+def _call_name(node: ast.expr) -> str:
+    if isinstance(node, ast.Name):
+        return node.id
+    if isinstance(node, ast.Attribute):
+        return node.attr
+    return type(node).__name__
 
 
 def _plan_text(plan: TeachingPlan) -> str:
