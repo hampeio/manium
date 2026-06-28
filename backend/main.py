@@ -12,6 +12,7 @@ from backend.ai.prompt_store import apply_prompt_overrides, get_prompt_values, l
 from backend.core.config import get_settings
 from backend.core.logging import configure_logging
 from backend.services.generation_service import GenerationService
+from backend.services.annotation_service import AnnotationService
 from backend.services.project_manager import ProjectManager
 from backend.services.task_registry import TaskRegistry
 from backend.workflow.executor import WorkflowExecutor
@@ -45,6 +46,7 @@ project_manager = ProjectManager(settings.generated_projects_dir)
 generation_service = GenerationService(settings, project_manager)
 task_registry = TaskRegistry()
 workflow_executor = WorkflowExecutor(generation_service, project_manager)
+annotation_service = AnnotationService()
 
 
 @app.get("/health")
@@ -329,6 +331,56 @@ def video(path: str) -> FileResponse:
 @app.head("/video")
 def video_head(path: str) -> FileResponse:
     return video(path)
+
+
+@app.get("/project/annotations")
+def project_annotations(project_dir: str) -> dict[str, object]:
+    try:
+        annotations = annotation_service.load(Path(project_dir))
+    except (FileNotFoundError, json.JSONDecodeError) as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return {"project_dir": str(Path(project_dir).resolve()), "annotations": annotations}
+
+
+@app.post("/project/annotations")
+def create_project_annotation(payload: dict[str, object]) -> dict[str, object]:
+    project_dir = str(payload.pop("project_dir", ""))
+    if not project_dir:
+        raise HTTPException(status_code=400, detail="project_dir is required.")
+    try:
+        annotation = annotation_service.create(Path(project_dir), payload)
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except (TypeError, ValueError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return {"annotation": annotation}
+
+
+@app.put("/project/annotations/{annotation_id}")
+def update_project_annotation(annotation_id: str, payload: dict[str, object]) -> dict[str, object]:
+    project_dir = str(payload.pop("project_dir", ""))
+    if not project_dir:
+        raise HTTPException(status_code=400, detail="project_dir is required.")
+    try:
+        annotation = annotation_service.update(Path(project_dir), annotation_id, payload)
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except (TypeError, ValueError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    if not annotation:
+        raise HTTPException(status_code=404, detail="Annotation not found.")
+    return {"annotation": annotation}
+
+
+@app.delete("/project/annotations/{annotation_id}")
+def delete_project_annotation(annotation_id: str, project_dir: str) -> dict[str, object]:
+    try:
+        deleted = annotation_service.delete(Path(project_dir), annotation_id)
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Annotation not found.")
+    return {"deleted": True, "id": annotation_id}
 
 
 @app.get("/projects/root")

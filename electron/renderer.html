@@ -103,15 +103,45 @@
         <section class="panel player">
           <div class="panel-title">视频预览</div>
           <div class="video-review-layout">
-            <video id="videoPlayer" controls></video>
+            <div class="annotation-media-column">
+              <div id="annotationStage" class="annotation-stage">
+                <video id="videoPlayer" controls></video>
+                <img id="annotationImagePreview" class="annotation-image-preview hidden" alt="批注图片预览" />
+                <canvas id="annotationCanvas" aria-label="画面批注画布"></canvas>
+              </div>
+              <div class="annotation-toolbar" aria-label="批注工具栏">
+                <button class="annotation-tool active" data-annotation-tool="select" title="选择、拖动或缩放矩形">选择</button>
+                <button class="annotation-tool" data-annotation-tool="brush">画笔</button>
+                <button class="annotation-tool" data-annotation-tool="arrow">箭头</button>
+                <button class="annotation-tool" data-annotation-tool="rectangle">矩形框</button>
+                <button class="annotation-tool" data-annotation-tool="segment">片段</button>
+                <label class="annotation-color-control">颜色 <input id="annotationColor" type="color" value="#fb7185" /></label>
+                <label class="annotation-width-control">粗细 <input id="annotationWidth" type="range" min="1" max="14" value="4" /></label>
+                <button id="annotationUndoBtn" class="secondary" title="撤销当前未保存图形">撤销</button>
+                <button id="annotationRedoBtn" class="secondary" title="重做当前未保存图形">重做</button>
+                <button id="annotationClearBtn" class="secondary" title="清除当前未保存图形">清除当前</button>
+              </div>
+            </div>
             <aside class="segment-annotation-panel">
-              <div class="annotation-title">片段标注</div>
+              <div class="annotation-title">画面与片段批注</div>
               <div id="annotationSegmentLabel" class="path-line">请选择下方分镜片段</div>
-              <textarea id="segmentAnnotationInput" placeholder="例如：这一段和上一段太像；请改成颗粒力链放大图，减少横断面复用。"></textarea>
-              <button id="sendSegmentAnnotationBtn" class="primary" disabled>发送给 AI 修正此片段</button>
-              <div id="annotationStatus" class="path-line">不会阻止当前生成任务。</div>
+              <div id="annotationBindingLabel" class="annotation-binding-label">绑定：当前画面 00:00.000</div>
+              <textarea id="segmentAnnotationInput" placeholder="输入与当前涂鸦、矩形框或片段绑定的文字说明。"></textarea>
+              <div class="annotation-editor-actions">
+                <button id="saveAnnotationBtn" class="primary" disabled>保存批注</button>
+                <button id="deleteAnnotationBtn" class="secondary" disabled>删除</button>
+              </div>
+              <button id="sendSegmentAnnotationBtn" class="secondary" disabled>保存并发送给 AI 修正片段</button>
+              <div id="annotationStatus" class="path-line">选择工具后可在画面上直接标记。</div>
             </aside>
           </div>
+          <section class="annotation-list-panel">
+            <div class="annotation-list-header">
+              <strong>批注列表</strong>
+              <span id="annotationCount" class="path-line">0 条</span>
+            </div>
+            <div id="annotationList" class="annotation-list"><div class="annotation-empty">当前项目暂无批注。</div></div>
+          </section>
           <div class="player-actions">
             <button id="replayBtn" class="secondary">重播</button>
             <button id="pauseTaskBtn" class="secondary" disabled>暂停生成</button>
@@ -261,6 +291,7 @@
         </div>
       </div>
     </div>
+    <script src="./annotation-editor.js"></script>
     <script src="./renderer.js"></script>
   </body>
 </html>

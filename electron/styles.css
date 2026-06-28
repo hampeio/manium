@@ -79,34 +79,98 @@ p {
 }
 
 .video-review-layout {
-  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 310px;
+  gap: 12px;
 }
 
-.player video {
+.annotation-media-column {
+  min-width: 0;
+}
+
+.annotation-stage {
+  position: relative;
   width: 100%;
   height: 310px;
-  background: #050816;
+  overflow: hidden;
   border: 1px solid var(--line);
   border-radius: 6px;
+  background: #050816;
+  touch-action: none;
+}
+
+.player video,
+.annotation-image-preview {
+  width: 100%;
+  height: 100%;
+  display: block;
+  object-fit: contain;
+  background: #050816;
+}
+
+#annotationCanvas {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  width: 100%;
+  height: 100%;
+  cursor: crosshair;
+  touch-action: none;
+}
+
+#annotationCanvas.select-mode {
+  cursor: default;
+}
+
+.annotation-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.annotation-toolbar button {
+  min-height: 32px;
+  padding: 5px 9px;
+}
+
+.annotation-tool.active {
+  border-color: var(--accent-2);
+  color: var(--accent-2);
+  box-shadow: 0 0 0 1px rgba(245, 158, 11, 0.22) inset;
+}
+
+.annotation-color-control,
+.annotation-width-control {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin: 0;
+  padding: 0 5px;
+  white-space: nowrap;
+}
+
+.annotation-color-control input {
+  width: 34px;
+  height: 28px;
+  padding: 2px;
+}
+
+.annotation-width-control input {
+  width: 74px;
 }
 
 .segment-annotation-panel {
-  position: absolute;
-  top: 10px;
-  right: 10px;
-  z-index: 5;
   display: flex;
   flex-direction: column;
   gap: 8px;
-  width: 250px;
-  max-width: calc(100% - 20px);
-  min-height: 240px;
+  min-width: 0;
+  min-height: 310px;
   border: 1px solid var(--line);
   border-radius: 6px;
-  background: rgba(15, 23, 42, 0.94);
-  backdrop-filter: blur(8px);
+  background: #0f172a;
   padding: 10px;
-  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.32);
 }
 
 .annotation-title {
@@ -116,8 +180,104 @@ p {
 
 .segment-annotation-panel textarea {
   flex: 1;
-  min-height: 100px;
+  min-height: 92px;
   resize: vertical;
+}
+
+.annotation-binding-label {
+  color: #cbd5e1;
+  font-size: 12px;
+}
+
+.annotation-editor-actions {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 7px;
+}
+
+.annotation-list-panel {
+  margin-top: 12px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #0f172a;
+  padding: 10px;
+}
+
+.annotation-list-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.annotation-list {
+  display: grid;
+  gap: 7px;
+  max-height: 220px;
+  overflow-y: auto;
+}
+
+.annotation-list-item {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  padding: 9px;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  background: #111c30;
+}
+
+.annotation-list-item.active {
+  border-color: var(--accent-2);
+  background: #182235;
+}
+
+.annotation-list-main {
+  min-width: 0;
+}
+
+.annotation-list-title {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin-bottom: 4px;
+}
+
+.annotation-type-badge {
+  color: var(--accent);
+  font-size: 11px;
+  border: 1px solid rgba(56, 189, 248, 0.45);
+  border-radius: 999px;
+  padding: 1px 6px;
+}
+
+.annotation-list-note,
+.annotation-list-binding {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.annotation-list-note {
+  color: var(--text);
+  font-size: 13px;
+}
+
+.annotation-list-binding,
+.annotation-empty {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.annotation-list-actions {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.annotation-list-actions button {
+  padding: 4px 7px;
+  font-size: 12px;
 }
 
 .player {
@@ -125,11 +285,12 @@ p {
 }
 
 @media (max-width: 1100px) {
+  .video-review-layout {
+    grid-template-columns: 1fr;
+  }
+
   .segment-annotation-panel {
-    position: static;
-    width: 100%;
-    margin-top: 10px;
-    min-height: 200px;
+    min-height: 220px;
   }
 }
 

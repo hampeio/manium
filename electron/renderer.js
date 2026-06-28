@@ -296,6 +296,7 @@ function applyResult(result) {
   }
   currentStages = result.stages || [];
   currentSegments = result.segments || [];
+  window.annotationEditor?.setProject(currentProjectDir, currentSegments);
   renderStages(currentStages, currentSegments, 3);
   renderSegments(currentSegments, result.video_path);
   renderAudioPreview(result);
@@ -312,6 +313,7 @@ function applyPartialResult(partial) {
   if (partial.storyboard) elements.storyboardView.textContent = JSON.stringify(partial.storyboard, null, 2);
   currentStages = partial.stages || currentStages;
   currentSegments = partial.segments || currentSegments;
+  window.annotationEditor?.setProject(currentProjectDir, currentSegments);
   renderStages(currentStages, currentSegments, detectCurrentStage([]));
   renderSegments(currentSegments, partial.video_path || null);
   renderAudioPreview(partial);
@@ -450,6 +452,7 @@ function bindComposeVideoButton() {
 function updateAnnotationSelection(button) {
   if (!elements.annotationSegmentLabel || !elements.sendSegmentAnnotationBtn) return;
   const segmentId = button?.dataset?.segmentId || (selectedSegmentId && selectedSegmentId !== "final" ? selectedSegmentId : "");
+  window.annotationEditor?.setSelectedSegment(segmentId);
   const segment = currentSegments.find((item) => item.id === segmentId);
   if (!segmentId || !segment) {
     elements.annotationSegmentLabel.textContent = "请选择下方分镜片段";
@@ -475,6 +478,7 @@ async function submitSegmentAnnotation() {
     elements.annotationStatus.textContent = "当前项目路径不可用。";
     return;
   }
+  await window.annotationEditor?.ensureSegmentAnnotation(note);
   const form = new FormData();
   form.append("source_project_dir", lastQuickResult.project_dir);
   form.append("segment_id", targetSegmentId);
@@ -562,6 +566,7 @@ function applyNonIntrusivePartialResult(partial) {
 
 function playVideoPath(videoPath, logger) {
   const videoUrl = `${API_BASE}/video?path=${encodeURIComponent(videoPath)}&t=${Date.now()}`;
+  window.annotationEditor?.showVideo();
   loadVideo(elements.videoPlayer, videoUrl, logger);
 }
 
@@ -851,6 +856,7 @@ async function pollTask(taskId) {
 elements.imageInput.addEventListener("change", () => {
   const file = elements.imageInput.files[0];
   elements.imageName.textContent = file ? file.name : "选择图片";
+  window.annotationEditor?.setImagePreview(file || null);
 });
 
 elements.outputBtn.addEventListener("click", async () => {
@@ -1019,6 +1025,7 @@ elements.generateBtn.addEventListener("click", async () => {
   currentStages = buildDefaultStages(totalDurationSeconds);
   currentSegments = [];
   selectedSegmentId = "";
+  window.annotationEditor?.setProject("", []);
   updateAnnotationSelection(null);
   if (elements.segmentAnnotationInput) elements.segmentAnnotationInput.value = "";
   if (elements.annotationStatus) elements.annotationStatus.textContent = "不会阻止当前生成任务。";
