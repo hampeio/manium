@@ -609,6 +609,32 @@ pre {
   overflow-wrap: anywhere;
 }
 
+.project-file-group {
+  margin-bottom: 7px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #101b2d;
+}
+
+.project-file-group summary {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px;
+  color: var(--text);
+  cursor: pointer;
+  user-select: none;
+}
+
+.project-file-group summary span {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.project-file-group-items {
+  padding: 0 6px 6px;
+}
+
 .project-folder-item {
   display: grid;
   gap: 4px;
@@ -626,6 +652,11 @@ pre {
   color: var(--muted);
   font-size: 11px;
   overflow-wrap: anywhere;
+}
+
+.project-folder-item .project-load-label {
+  color: var(--accent-2);
+  margin-top: 3px;
 }
 
 .project-file-content {

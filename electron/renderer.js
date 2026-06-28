@@ -651,10 +651,8 @@ async function loadProjectFiles(projectDir) {
       elements.projectFileContent.textContent = `项目路径：${payload.project_dir || projectDir}`;
       return;
     }
-    elements.projectFileList.innerHTML = payload.files.map((file) => `
-      <button class="project-file-item" data-full-path="${escapeHtml(file.full_path)}">${escapeHtml(file.path)}</button>
-    `).join("");
-    elements.projectFileContent.textContent = `已读取 ${payload.files.length} 个文件。\n请选择左侧文件查看内容。`;
+    elements.projectFileList.innerHTML = renderProjectFileGroups(payload.files);
+    elements.projectFileContent.textContent = `项目已加载：${payload.project_dir || projectDir}\n共 ${payload.files.length} 个文件。\n请选择左侧文件查看内容。`;
     elements.projectFileList.querySelectorAll(".project-file-item").forEach((button) => {
       button.addEventListener("click", () => loadProjectFile(button.dataset.fullPath));
     });
@@ -662,6 +660,47 @@ async function loadProjectFiles(projectDir) {
     elements.projectFileList.innerHTML = '<div class="project-files-state error">项目文件加载失败。</div>';
     elements.projectFileContent.textContent = `项目文件读取失败：${error.message}`;
   }
+}
+
+function renderProjectFileGroups(files) {
+  const groupDefinitions = [
+    { id: "core", label: "核心文件", open: true, match: (path) => !path.includes("/") },
+    { id: "outputs", label: "成品与输出", open: true, match: (path) => /^(outputs|stitched)\//.test(path) },
+    { id: "inputs", label: "输入素材", open: true, match: (path) => /^inputs\//.test(path) },
+    { id: "audio", label: "配音文件", open: false, match: (path) => /^audio\//.test(path) },
+    { id: "segments", label: "分镜片段", open: false, match: (path) => /^segments\//.test(path) },
+    { id: "ai", label: "模型调用记录", open: false, match: (path) => /^ai_traces\//.test(path) },
+    { id: "logs", label: "日志与修复", open: false, match: (path) => /^(logs|repairs|workflow_outputs|media)\//.test(path) },
+    { id: "other", label: "其他文件", open: false, match: () => true }
+  ];
+  const groups = new Map(groupDefinitions.map((group) => [group.id, []]));
+  files.forEach((file) => {
+    const definition = groupDefinitions.find((group) => group.match(file.path));
+    groups.get(definition.id).push(file);
+  });
+  return groupDefinitions
+    .filter((group) => groups.get(group.id).length)
+    .map((group) => {
+      const groupFiles = groups.get(group.id);
+      return `
+        <details class="project-file-group" ${group.open ? "open" : ""}>
+          <summary>${escapeHtml(group.label)} <span>${groupFiles.length}</span></summary>
+          <div class="project-file-group-items">
+            ${groupFiles.map((file) => `
+              <button class="project-file-item" data-full-path="${escapeHtml(file.full_path)}">
+                ${escapeHtml(shortProjectFileName(file.path, group.id))}
+              </button>
+            `).join("")}
+          </div>
+        </details>
+      `;
+    }).join("");
+}
+
+function shortProjectFileName(path, groupId) {
+  if (groupId === "core" || groupId === "other") return path;
+  const firstSlash = path.indexOf("/");
+  return firstSlash >= 0 ? path.slice(firstSlash + 1) : path;
 }
 
 async function loadProjectRootFiles() {
@@ -688,13 +727,20 @@ async function loadProjectRootFiles() {
       <button class="project-folder-item" data-project-dir="${escapeHtml(project.project_dir)}">
         <strong>${escapeHtml(project.title || project.name || "未命名项目")}</strong>
         <span>${escapeHtml(project.name || "")} · ${escapeHtml(project.status || "未知状态")}</span>
+        <span class="project-load-label">加载项目${project.video_path ? "并预览视频" : ""}</span>
       </button>
     `).join("");
     elements.projectFileContent.textContent = `根目录中共有 ${projects.length} 个项目。\n请选择左侧项目查看文件。`;
     elements.projectFileList.querySelectorAll(".project-folder-item").forEach((button) => {
       button.addEventListener("click", async () => {
         currentProjectDir = button.dataset.projectDir || "";
-        await loadProjectFiles(currentProjectDir);
+        elements.projectFileContent.textContent = "正在加载项目和中心预览...";
+        try {
+          await switchToRootProject(currentProjectDir);
+        } catch (error) {
+          elements.projectFileContent.textContent = `项目加载失败：${error.message}`;
+          appendLog(`项目加载失败：${error.message}`);
+        }
       });
     });
   } catch (error) {

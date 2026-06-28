@@ -391,8 +391,8 @@ def project_status(project_dir: str) -> dict[str, object]:
     segment_manifest = read_json("segment_manifest.json", {})
     final_summary = read_json("final_summary.json", {})
     segments = segment_manifest.get("segments", []) if isinstance(segment_manifest, dict) else []
-    stitched_video = root / "stitched" / "course_final.mp4"
-    final_video_path = str(stitched_video.resolve()) if stitched_video.exists() else None
+    finished_video = _finished_project_video(root)
+    final_video_path = str(finished_video.resolve()) if finished_video else None
     if final_video_path and isinstance(final_summary, dict):
         final_summary.setdefault("video_path", final_video_path)
         final_summary.setdefault("output_video_path", final_video_path)

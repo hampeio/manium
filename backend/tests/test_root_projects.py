@@ -1,7 +1,7 @@
 from pathlib import Path
 
 from backend.ai import prompt_store
-from backend.main import projects_root
+from backend.main import project_status, projects_root
 
 
 def test_root_projects_lists_only_finished_videos(tmp_path: Path):
@@ -41,3 +41,14 @@ def test_legacy_english_prompt_override_is_ignored(tmp_path: Path, monkeypatch):
     assert loaded == {}
     assert prompt_store.prompts.SYSTEM_PROMPT == "中文系统提示词"
     monkeypatch.setattr(prompt_store.prompts, "SYSTEM_PROMPT", original)
+
+
+def test_project_status_loads_output_video_without_stitched_copy(tmp_path: Path):
+    project = tmp_path / "project"
+    (project / "outputs").mkdir(parents=True)
+    output = project / "outputs" / "animation.mp4"
+    output.write_bytes(b"video")
+
+    payload = project_status(str(project))
+
+    assert payload["summary"]["video_path"] == str(output.resolve())
