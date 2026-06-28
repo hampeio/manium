@@ -153,8 +153,15 @@
           <pre id="codeView" class="tab-view hidden"></pre>
           <pre id="repairsView" class="tab-view hidden"></pre>
           <div id="filesView" class="tab-view hidden file-preview">
-            <div id="projectFileList" class="project-file-list"></div>
-            <pre id="projectFileContent" class="project-file-content"></pre>
+            <div class="project-root-toolbar">
+              <button id="projectRootBtn" class="secondary">根目录</button>
+              <button id="changeProjectRootBtn" class="secondary">更改根目录</button>
+              <span id="projectRootPath" class="path-line">默认：generated_projects</span>
+            </div>
+            <div class="file-preview-body">
+              <div id="projectFileList" class="project-file-list"></div>
+              <pre id="projectFileContent" class="project-file-content"></pre>
+            </div>
           </div>
           <div class="edit-panel">
             <div class="panel-title">生成后修改</div>

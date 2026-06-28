@@ -36,6 +36,9 @@ const elements = {
   projectPath: document.getElementById("projectPath"),
   projectFileList: document.getElementById("projectFileList"),
   projectFileContent: document.getElementById("projectFileContent"),
+  projectRootBtn: document.getElementById("projectRootBtn"),
+  changeProjectRootBtn: document.getElementById("changeProjectRootBtn"),
+  projectRootPath: document.getElementById("projectRootPath"),
   quickModeTab: document.getElementById("quickModeTab"),
   workflowModeTab: document.getElementById("workflowModeTab"),
   quickView: document.getElementById("quickView"),
@@ -633,8 +636,7 @@ function autoLoadFirstSegmentVideo(segments) {
 async function loadProjectFiles(projectDir) {
   if (!elements.projectFileList || !elements.projectFileContent) return;
   if (!projectDir) {
-    elements.projectFileList.innerHTML = '<div class="project-files-state">尚未选择项目。</div>';
-    elements.projectFileContent.textContent = "请先生成视频，或从根文件夹中选择一个项目。";
+    await loadProjectRootFiles();
     return;
   }
   currentProjectDir = projectDir;
@@ -659,6 +661,45 @@ async function loadProjectFiles(projectDir) {
   } catch (error) {
     elements.projectFileList.innerHTML = '<div class="project-files-state error">项目文件加载失败。</div>';
     elements.projectFileContent.textContent = `项目文件读取失败：${error.message}`;
+  }
+}
+
+async function loadProjectRootFiles() {
+  if (!elements.projectFileList || !elements.projectFileContent) return;
+  elements.projectFileList.innerHTML = '<div class="project-files-state">正在读取根目录...</div>';
+  elements.projectFileContent.textContent = "正在加载项目列表...";
+  const requestedRoot = currentRootDir || selectedOutputDir || "";
+  try {
+    const response = await fetch(
+      `${API_BASE}/projects/root?root_dir=${encodeURIComponent(requestedRoot)}&include_unfinished=true`
+    );
+    const payload = await response.json();
+    if (!response.ok) throw new Error(payload.detail || "根目录读取失败。");
+    currentRootDir = payload.root_dir || requestedRoot;
+    currentProjectDir = "";
+    if (elements.projectRootPath) elements.projectRootPath.textContent = currentRootDir;
+    const projects = payload.projects || [];
+    if (!projects.length) {
+      elements.projectFileList.innerHTML = '<div class="project-files-state">根目录中暂无项目。</div>';
+      elements.projectFileContent.textContent = `根目录：${currentRootDir}`;
+      return;
+    }
+    elements.projectFileList.innerHTML = projects.map((project) => `
+      <button class="project-folder-item" data-project-dir="${escapeHtml(project.project_dir)}">
+        <strong>${escapeHtml(project.title || project.name || "未命名项目")}</strong>
+        <span>${escapeHtml(project.name || "")} · ${escapeHtml(project.status || "未知状态")}</span>
+      </button>
+    `).join("");
+    elements.projectFileContent.textContent = `根目录中共有 ${projects.length} 个项目。\n请选择左侧项目查看文件。`;
+    elements.projectFileList.querySelectorAll(".project-folder-item").forEach((button) => {
+      button.addEventListener("click", async () => {
+        currentProjectDir = button.dataset.projectDir || "";
+        await loadProjectFiles(currentProjectDir);
+      });
+    });
+  } catch (error) {
+    elements.projectFileList.innerHTML = '<div class="project-files-state error">根目录加载失败。</div>';
+    elements.projectFileContent.textContent = `根目录读取失败：${error.message}`;
   }
 }
 
@@ -828,6 +869,22 @@ if (elements.rootFolderBtn) {
       if (elements.rootVideoList) elements.rootVideoList.innerHTML = `<div class="root-folder-empty">加载失败：${escapeHtml(error.message)}</div>`;
       appendLog(`根文件夹加载失败：${error.message}`);
     });
+  });
+}
+
+if (elements.projectRootBtn) {
+  elements.projectRootBtn.addEventListener("click", () => loadProjectRootFiles());
+}
+
+if (elements.changeProjectRootBtn) {
+  elements.changeProjectRootBtn.addEventListener("click", async () => {
+    const dir = await window.desktopApi.selectOutputDir();
+    if (!dir) return;
+    selectedOutputDir = dir;
+    currentRootDir = dir;
+    elements.outputDir.textContent = dir;
+    await loadProjectRootFiles();
+    appendLog(`根目录已更改为：${dir}`);
   });
 }
 

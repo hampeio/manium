@@ -22,6 +22,10 @@ def test_root_projects_lists_only_finished_videos(tmp_path: Path):
     assert payload["projects"][0]["title"] == "介绍中国铁路"
     assert payload["projects"][0]["project_dir"] == str(finished.resolve())
 
+    all_projects = projects_root(str(tmp_path), include_unfinished=True)
+    assert len(all_projects["projects"]) == 2
+    assert {project["status"] for project in all_projects["projects"]} == {"已完成", "未完成"}
+
 
 def test_legacy_english_prompt_override_is_ignored(tmp_path: Path, monkeypatch):
     override = tmp_path / "prompt_overrides.json"

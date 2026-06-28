@@ -332,8 +332,8 @@ def video_head(path: str) -> FileResponse:
 
 
 @app.get("/projects/root")
-def projects_root(root_dir: str = "") -> dict[str, object]:
-    """Lists finished project videos directly below the selected output root."""
+def projects_root(root_dir: str = "", include_unfinished: bool = False) -> dict[str, object]:
+    """Lists projects below an output root, optionally including unfinished work."""
 
     root = Path(root_dir).resolve() if root_dir else settings.generated_projects_dir.resolve()
     if not root.exists() or not root.is_dir():
@@ -346,7 +346,7 @@ def projects_root(root_dir: str = "") -> dict[str, object]:
         reverse=True,
     ):
         video_path = _finished_project_video(project_dir)
-        if not video_path:
+        if not video_path and not include_unfinished:
             continue
         prompt_path = project_dir / "inputs" / "user_prompt.txt"
         prompt = prompt_path.read_text(encoding="utf-8", errors="replace").strip() if prompt_path.exists() else ""
@@ -354,10 +354,11 @@ def projects_root(root_dir: str = "") -> dict[str, object]:
             {
                 "name": project_dir.name,
                 "project_dir": str(project_dir.resolve()),
-                "video_path": str(video_path.resolve()),
+                "video_path": str(video_path.resolve()) if video_path else None,
                 "title": prompt.splitlines()[0][:80] if prompt else project_dir.name,
                 "modified_at": project_dir.stat().st_mtime,
-                "size": video_path.stat().st_size,
+                "size": video_path.stat().st_size if video_path else 0,
+                "status": "已完成" if video_path else "未完成",
             }
         )
     return {"root_dir": str(root), "projects": projects}
