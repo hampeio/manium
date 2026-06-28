@@ -566,6 +566,16 @@ pre {
   padding-right: 8px;
 }
 
+.project-files-state {
+  padding: 10px 6px;
+  color: var(--muted);
+  line-height: 1.5;
+}
+
+.project-files-state.error {
+  color: #fca5a5;
+}
+
 .project-file-item {
   width: 100%;
   margin-bottom: 6px;

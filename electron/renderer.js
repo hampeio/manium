@@ -96,6 +96,7 @@ let promptTemplates = {};
 let selectedPromptName = "";
 let selectedSegmentId = "";
 let currentRootDir = "";
+let currentProjectDir = "";
 
 const categoryLabels = {
   input: "输入",
@@ -264,6 +265,7 @@ function renderTaskLogs(logs) {
 
 function applyResult(result) {
   lastQuickResult = result;
+  currentProjectDir = result.project_dir || currentProjectDir;
   elements.projectPath.textContent = `项目：${result.project_dir || "不可用"}`;
   elements.storyboardView.textContent = JSON.stringify(result.storyboard || [], null, 2);
   elements.codeView.textContent = result.manim_code || "";
@@ -302,6 +304,7 @@ function applyResult(result) {
 function applyPartialResult(partial) {
   if (!partial) return;
   lastQuickResult = { ...(lastQuickResult || {}), ...partial };
+  currentProjectDir = partial.project_dir || currentProjectDir;
   if (partial.project_dir) elements.projectPath.textContent = `项目：${partial.project_dir}`;
   if (partial.storyboard) elements.storyboardView.textContent = JSON.stringify(partial.storyboard, null, 2);
   currentStages = partial.stages || currentStages;
@@ -628,19 +631,33 @@ function autoLoadFirstSegmentVideo(segments) {
 }
 
 async function loadProjectFiles(projectDir) {
-  if (!projectDir || !elements.projectFileList) return;
+  if (!elements.projectFileList || !elements.projectFileContent) return;
+  if (!projectDir) {
+    elements.projectFileList.innerHTML = '<div class="project-files-state">尚未选择项目。</div>';
+    elements.projectFileContent.textContent = "请先生成视频，或从根文件夹中选择一个项目。";
+    return;
+  }
+  currentProjectDir = projectDir;
+  elements.projectFileList.innerHTML = '<div class="project-files-state">正在读取项目文件...</div>';
+  elements.projectFileContent.textContent = "正在加载...";
   try {
     const response = await fetch(`${API_BASE}/project/files?project_dir=${encodeURIComponent(projectDir)}`);
     const payload = await response.json();
     if (!response.ok) throw new Error(payload.detail || "项目文件读取失败。");
+    if (!payload.files?.length) {
+      elements.projectFileList.innerHTML = '<div class="project-files-state">该项目文件夹为空。</div>';
+      elements.projectFileContent.textContent = `项目路径：${payload.project_dir || projectDir}`;
+      return;
+    }
     elements.projectFileList.innerHTML = payload.files.map((file) => `
       <button class="project-file-item" data-full-path="${escapeHtml(file.full_path)}">${escapeHtml(file.path)}</button>
     `).join("");
-    elements.projectFileContent.textContent = "请选择左侧项目文件。";
+    elements.projectFileContent.textContent = `已读取 ${payload.files.length} 个文件。\n请选择左侧文件查看内容。`;
     elements.projectFileList.querySelectorAll(".project-file-item").forEach((button) => {
       button.addEventListener("click", () => loadProjectFile(button.dataset.fullPath));
     });
   } catch (error) {
+    elements.projectFileList.innerHTML = '<div class="project-files-state error">项目文件加载失败。</div>';
     elements.projectFileContent.textContent = `项目文件读取失败：${error.message}`;
   }
 }
@@ -759,11 +776,14 @@ elements.outputBtn.addEventListener("click", async () => {
 });
 
 document.querySelectorAll(".tab").forEach((button) => {
-  button.addEventListener("click", () => {
+  button.addEventListener("click", async () => {
     document.querySelectorAll(".tab").forEach((item) => item.classList.remove("active"));
     document.querySelectorAll(".tab-view").forEach((item) => item.classList.add("hidden"));
     button.classList.add("active");
     document.getElementById(`${button.dataset.tab}View`).classList.remove("hidden");
+    if (button.dataset.tab === "files") {
+      await loadProjectFiles(currentProjectDir || lastQuickResult?.project_dir || "");
+    }
   });
 });
 
@@ -884,7 +904,8 @@ elements.generateBtn.addEventListener("click", async () => {
   elements.codeView.textContent = "";
   elements.repairsView.textContent = "";
   elements.projectFileList.innerHTML = "";
-  elements.projectFileContent.textContent = "";
+  elements.projectFileContent.textContent = "生成任务创建后将在这里显示项目文件。";
+  currentProjectDir = "";
   if (elements.audioStatus) {
     elements.audioStatus.textContent = "配音：正在等待视频生成";
     elements.audioStatus.classList.remove("success", "warning");
