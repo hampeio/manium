@@ -11,14 +11,11 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from email.utils import format_datetime
 from pathlib import Path
-from typing import Any
 from urllib.parse import quote, urlparse
 
 import websocket
 
 from backend.core.config import Settings
-from backend.ai.capabilities import AudioProfile, CapabilityProbeResult, utc_now_iso
-from backend.services.configuration_service import ConfigurationService
 
 
 @dataclass
@@ -36,13 +33,11 @@ class TTSResult:
 class TTSService:
     """Fish Audio first, with the older Xunfei WebSocket path kept as fallback."""
 
-    def __init__(self, settings: Settings, configuration_service: ConfigurationService | None = None):
+    def __init__(self, settings: Settings):
         self.settings = settings
-        self.configuration_service = configuration_service or ConfigurationService(settings)
 
     def is_configured(self) -> bool:
-        custom = self.configuration_service.get_audio_profile()
-        return bool(custom and custom.enabled and custom.api_base_url) or self._fish_configured() or self._xunfei_configured()
+        return self._fish_configured() or self._xunfei_configured()
 
     def synthesize_segment_audio(self, text: str, output_path: Path) -> TTSResult:
         """Synthesize one segment narration without concatenating or muxing project media."""
@@ -215,15 +210,6 @@ class TTSService:
 
     def _synthesize_text_with_fallback(self, text: str, output_path: Path) -> str:
         errors: list[str] = []
-        custom = self.configuration_service.get_audio_profile()
-        if custom and custom.enabled and custom.api_base_url:
-            try:
-                self._synthesize_text_custom(custom, text, output_path)
-                self.configuration_service.update_audio_status(custom.id, status="success", message="音频生成成功。")
-                return custom.provider_name
-            except Exception as exc:
-                errors.append(f"{custom.provider_name}: {exc}")
-                self.configuration_service.update_audio_status(custom.id, status="failed", message=str(exc))
         if self._fish_configured():
             for attempt in range(1, 4):
                 try:
@@ -239,61 +225,6 @@ class TTSService:
             except Exception as exc:
                 errors.append(f"xunfei: {exc}")
         raise RuntimeError("; ".join(errors) or "没有可用的 TTS 服务。")
-
-    def test_audio_profile(self, profile: AudioProfile, output_path: Path) -> TTSResult:
-        try:
-            self._synthesize_text_custom(profile, "这是一段音频接口连通性测试。", output_path)
-            probe = CapabilityProbeResult(status="success", tested_at=utc_now_iso(), message="连通性测试成功。", detected={"audio": True})
-            self.configuration_service.update_audio_status(profile.id, status="success", message="连通性测试成功。", probe=probe.model_dump())
-            return TTSResult(enabled=True, audio_path=output_path, status="success", message="连通性测试成功。")
-        except Exception as exc:
-            probe = CapabilityProbeResult(status="failed", tested_at=utc_now_iso(), message=str(exc), detected={"audio": False})
-            self.configuration_service.update_audio_status(profile.id, status="failed", message=str(exc), probe=probe.model_dump())
-            return TTSResult(enabled=True, status="failed", error=str(exc), message="连通性测试失败。")
-
-    def _synthesize_text_custom(self, profile: AudioProfile, text: str, output_path: Path) -> None:
-        headers = {
-            key: str(value).replace("{api_key}", profile.api_key).replace("{model}", profile.model_name)
-            for key, value in profile.request_headers.items()
-        }
-        headers.setdefault("Content-Type", "application/json")
-        if profile.api_key:
-            headers.setdefault("Authorization", f"Bearer {profile.api_key}")
-        payload = json.loads(json.dumps(profile.request_parameters, ensure_ascii=False))
-        payload[profile.text_field] = text
-        if profile.model_name and profile.model_field:
-            payload[profile.model_field] = profile.model_name
-        request = urllib.request.Request(
-            profile.api_base_url,
-            data=json.dumps(payload, ensure_ascii=False).encode("utf-8"),
-            headers=headers,
-            method="POST",
-        )
-        try:
-            with urllib.request.urlopen(request, timeout=120) as response:
-                content = response.read()
-        except urllib.error.HTTPError as exc:
-            body = exc.read().decode("utf-8", errors="replace")
-            raise RuntimeError(f"音频接口返回 HTTP {exc.code}: {body[:600]}") from exc
-        except urllib.error.URLError as exc:
-            raise RuntimeError(f"音频接口请求失败: {exc}") from exc
-
-        if profile.response_mode == "binary":
-            audio = content
-        else:
-            data = json.loads(content.decode("utf-8"))
-            value: Any = data
-            for key in profile.response_audio_field.split("."):
-                value = value[key]
-            if profile.response_mode == "json_base64":
-                audio = base64.b64decode(str(value))
-            else:
-                with urllib.request.urlopen(str(value), timeout=120) as response:
-                    audio = response.read()
-        if not audio:
-            raise RuntimeError("音频接口未返回有效音频数据。")
-        output_path.parent.mkdir(parents=True, exist_ok=True)
-        output_path.write_bytes(audio)
 
     def _append_tts_log(self, path: Path, payload: dict[str, object]) -> None:
         with path.open("a", encoding="utf-8") as handle:

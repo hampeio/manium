@@ -10,6 +10,4 @@ media/
 dist/
 tmp_runtime_logs/
 backups/
-config/provider_profiles.json
-config/audio_tests/
 *.log

@@ -1,4 +1,0 @@
-interface:
-  display_name: "Manim 工作流预设生成器"
-  short_description: "学习已有 Manim 工程风格并生成可复用工作流提示词预设"
-  default_prompt: "Use $manim-workflow-preset-generator to analyze this Manim project and create a reusable Style Library preset."

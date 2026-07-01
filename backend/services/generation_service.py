@@ -3,7 +3,6 @@ import json
 import shutil
 import traceback
 from collections.abc import Callable
-from datetime import datetime, timezone
 from pathlib import Path
 
 from backend.ai.model_router import ModelRouter
@@ -83,8 +82,6 @@ class GenerationService:
                 priority_rule,
                 total_duration_seconds,
             )
-            if model_router.provider_disabled_reason:
-                emit(model_router.provider_disabled_reason)
             strategy = self._normalize_strategy(strategy, total_duration_seconds, preferred_scene_count)
             writer.write_json(project_dir, "generation_strategy.json", strategy.model_dump())
             emit(f"大纲已完成。计划调用模型 {strategy.ai_call_count} 次，分镜批次 {len(strategy.batches)} 个。")
@@ -220,7 +217,6 @@ class GenerationService:
         edit_prompt: str,
         model_router: ModelRouter,
         quality: str,
-        reference_image: Path | None = None,
         progress: ProgressCallback | None = None,
         partial_update: PartialCallback | None = None,
     ) -> dict[str, object]:
@@ -269,7 +265,6 @@ class GenerationService:
             segment_index=int(target.get("segment") or scene_indexes[0]),
             segment_count=max(1, len(segments)),
             segment_duration_seconds=segment_duration,
-            image_path=reference_image,
         )
         code = sanitize_manim_code(code)
         scene_file = writer.write_text(segment_dir, "scene.py", code)
@@ -350,175 +345,6 @@ class GenerationService:
         if partial_update:
             partial_update(partial)
         return partial | {"success": True, "storyboard": [scene.model_dump() for scene in plan.scenes]}
-
-    def get_segment_code_info(self, *, project_dir: Path, segment_id: str) -> dict[str, object]:
-        manifest_path = project_dir / "segment_manifest.json"
-        if not manifest_path.exists():
-            raise FileNotFoundError("项目缺少片段清单。")
-        segments = json.loads(manifest_path.read_text(encoding="utf-8", errors="replace")).get("segments", [])
-        target = next((item for item in segments if str(item.get("id")) == segment_id), None)
-        if not target:
-            raise ValueError(f"找不到片段：{segment_id}")
-        code_path = Path(str(target.get("code_path") or ""))
-        if not code_path.exists():
-            segment_number = int(target.get("segment") or 0)
-            code_path = project_dir / "segments" / f"part_{segment_number:02d}" / "scene.py"
-        if not code_path.exists():
-            raise FileNotFoundError("当前片段没有可编辑的 Manim 代码。")
-        audio_path = Path(str(target.get("audio_path") or ""))
-        video_path = Path(str(target.get("video_path") or ""))
-        audio_duration = self.segment_media.probe_duration(audio_path) if audio_path.exists() else 0.0
-        video_duration = self.segment_media.probe_duration(video_path) if video_path.exists() else 0.0
-        history = []
-        for item in target.get("code_history") or []:
-            historical_path = Path(str(item.get("code_path") or ""))
-            history.append(
-                {
-                    **item,
-                    "code": historical_path.read_text(encoding="utf-8", errors="replace") if historical_path.exists() else "",
-                }
-            )
-        return {
-            "segment_id": segment_id,
-            "title": target.get("title"),
-            "code": code_path.read_text(encoding="utf-8", errors="replace"),
-            "code_path": str(code_path.resolve()),
-            "code_revision": int(target.get("code_revision") or target.get("revision") or 1),
-            "history": history,
-            "video_duration": round(video_duration, 3),
-            "audio_duration": round(audio_duration, 3),
-            "aligned": abs(video_duration - audio_duration) <= self.segment_media.tolerance_seconds if audio_duration else True,
-            "needs_audio_stretch": bool(audio_duration and abs(video_duration - audio_duration) > self.segment_media.tolerance_seconds),
-            "timing_policy": target.get("timing_policy") or "auto_audio",
-            "manual_duration": target.get("manual_duration"),
-        }
-
-    async def render_segment_code(
-        self,
-        *,
-        project_dir: Path,
-        segment_id: str,
-        manim_code: str,
-        quality: str,
-        timing_policy: str = "auto_audio",
-        manual_duration: float | None = None,
-        progress: ProgressCallback | None = None,
-        partial_update: PartialCallback | None = None,
-    ) -> dict[str, object]:
-        """Validate and render user-edited code for one segment only."""
-
-        if timing_policy not in {"auto_audio", "keep_video", "manual"}:
-            raise ValueError("未知的音画时长策略。")
-        if "class GeneratedTeachingScene" not in manim_code:
-            raise ValueError("代码必须包含 GeneratedTeachingScene(Scene)。")
-        emit = progress or (lambda _message: None)
-        writer = ProjectManager(project_dir)
-        plan = TeachingPlan.model_validate(
-            json.loads((project_dir / "teaching_plan.json").read_text(encoding="utf-8", errors="replace"))
-        )
-        manifest_path = project_dir / "segment_manifest.json"
-        manifest = json.loads(manifest_path.read_text(encoding="utf-8", errors="replace"))
-        segments = manifest.get("segments", [])
-        target = next((item for item in segments if str(item.get("id")) == segment_id), None)
-        if not target:
-            raise ValueError(f"找不到片段：{segment_id}")
-        scene_indexes = [int(value) for value in target.get("scene_indexes", [])]
-        scenes = [scene for scene in plan.scenes if scene.index in scene_indexes]
-        segment_plan = TeachingPlan(
-            image_understanding=plan.image_understanding,
-            teaching_goal=plan.teaching_goal,
-            conflict_strategy=plan.conflict_strategy,
-            scenes=scenes,
-            code_plan=plan.code_plan,
-        )
-        revision = int(target.get("revision") or 1) + 1
-        code_revision = int(target.get("code_revision") or target.get("revision") or 1) + 1
-        segment_dir = project_dir / "segments" / f"code_edit_{code_revision:03d}_{segment_id}"
-        for folder in ("logs", "outputs"):
-            (segment_dir / folder).mkdir(parents=True, exist_ok=True)
-
-        current_path = Path(str(target.get("code_path") or ""))
-        if current_path.exists():
-            history_dir = project_dir / "code_history" / segment_id
-            history_dir.mkdir(parents=True, exist_ok=True)
-            history_path = history_dir / f"v{code_revision - 1:03d}.py"
-            history_path.write_text(current_path.read_text(encoding="utf-8", errors="replace"), encoding="utf-8")
-            code_history = list(target.get("code_history") or [])
-            code_history.append(
-                {
-                    "revision": code_revision - 1,
-                    "code_path": str(history_path.resolve()),
-                    "saved_at": datetime.now(timezone.utc).isoformat(),
-                }
-            )
-        else:
-            code_history = list(target.get("code_history") or [])
-
-        code = sanitize_manim_code(manim_code)
-        scene_file = writer.write_text(segment_dir, "scene.py", code)
-        writer.write_text(segment_dir, "original_manim_code.py", code)
-        emit(f"正在校验 {segment_id} 的 Manim 代码。")
-        result = await self._render_checked(
-            segment_dir, scene_file, quality, writer, "user_code", None, segment_plan
-        )
-        self.renderer.save_log(segment_dir / "logs" / "render_user_code.json", result)
-        if not result.success or not result.video_path:
-            detail = (result.stderr or result.stdout or "未知渲染错误")[-5000:]
-            raise RuntimeError(f"当前片段 Manim 代码校验或渲染失败。请检查错误行：\n{detail}")
-
-        narration = "\n".join(scene.narration for scene in scenes if scene.narration).strip()
-        assets = await asyncio.to_thread(
-            self.segment_media.prepare_segment,
-            project_dir=project_dir,
-            segment_id=segment_id,
-            rendered_video=result.video_path,
-            narration_text=narration,
-            revision=revision,
-            previous=target,
-            timing_policy=timing_policy,
-            manual_duration=manual_duration,
-        )
-        target.update(assets)
-        target.update(
-            {
-                "segment_id": segment_id,
-                "status": "replaced",
-                "project_dir": str(segment_dir.resolve()),
-                "code_path": str(scene_file.resolve()),
-                "code_revision": code_revision,
-                "code_history": code_history,
-                "timing_policy": timing_policy,
-                "manual_duration": manual_duration,
-                "estimated_seconds": assets["duration"],
-            }
-        )
-        self.segment_media.synchronize_timeline(project_dir, segments)
-        writer.write_json(project_dir, "segment_manifest.json", {"mode": "replacement_segment_manifest", "segments": segments})
-        summary_path = project_dir / "final_summary.json"
-        summary = json.loads(summary_path.read_text(encoding="utf-8", errors="replace")) if summary_path.exists() else {}
-        summary.update(
-            {
-                "video_path": None,
-                "output_video_path": None,
-                "compose_status": "stale",
-                "final_video_stale": True,
-                "segments": segments,
-                "last_replaced_segment": segment_id,
-            }
-        )
-        writer.write_json(project_dir, "final_summary.json", summary)
-        partial = {
-            "project_dir": str(project_dir.resolve()),
-            "segments": segments,
-            "video_path": None,
-            "segment_preview_path": target.get("preview_video_path"),
-            "compose_status": "stale",
-            "updated_segment_id": segment_id,
-        }
-        if partial_update:
-            partial_update(partial)
-        emit(f"{segment_id} 已重新渲染，等待用户手动合成总体视频。")
-        return partial | {"success": True}
 
     async def compose_project(
         self,
@@ -612,9 +438,7 @@ class GenerationService:
         """Upgrade legacy manifests to independent per-segment assets before manual composition."""
 
         for index, segment in enumerate(segments, start=1):
-            required = [segment.get("video_path"), segment.get("subtitle_path")]
-            if getattr(self, "tts_service", None) and self.tts_service.is_configured():
-                required.append(segment.get("audio_path"))
+            required = [segment.get("video_path"), segment.get("audio_path"), segment.get("subtitle_path")]
             if all(value and Path(str(value)).exists() for value in required):
                 continue
             source_video = Path(str(segment.get("video_path") or ""))
@@ -1082,9 +906,7 @@ class GenerationService:
         emit("首次渲染失败，开始自动修复。")
         if recorder:
             recorder.record_event("repair", "info", "Initial render failed; entering repair loop.", {"project_dir": project_dir})
-        round_index = 0
-        while True:
-            round_index += 1
+        for round_index in range(1, self.settings.max_repair_rounds + 1):
             emit(f"自动修复第 {round_index} 轮：正在请求模型修复 Manim 代码。")
             repair_dir = project_dir / "repairs" / f"round_{round_index}"
             repair_dir.mkdir(parents=True, exist_ok=True)
@@ -1107,16 +929,18 @@ class GenerationService:
                 if recorder:
                     recorder.record_event("repair", "info", "Repair round succeeded.", {"round": round_index})
                 return result
-            if result.environment_error:
-                emit(f"自动修复第 {round_index} 轮遇到本地环境错误，停止继续调用模型。")
-                if recorder:
-                    recorder.record_event(
-                        "repair",
-                        "error",
-                        "Repair loop stopped because the local render environment is unavailable.",
-                        {"round": round_index},
-                    )
-                return result
+
+        emit("已达到自动修复次数上限，正在渲染简化后备版本。")
+        fallback = await model_router.repair_code(self._repair_goal_context(generated.plan), "Create a minimal runnable version.", "The first three repair rounds failed.")
+        fallback_code = sanitize_manim_code(fallback.repaired_code)
+        scene_file.write_text(fallback_code, encoding="utf-8")
+        writer.write_text(project_dir, "repairs/simplified_after_failure.py", fallback_code)
+        writer.write_json(project_dir, "repairs/final_repair_summary.json", {"fallback_notes": fallback.notes})
+        result = await self._render_checked(project_dir, scene_file, "low", writer, "simplified", recorder, generated.plan)
+        self.renderer.save_log(project_dir / "logs" / "render_simplified.json", result)
+        if recorder:
+            recorder.record_event("repair", "info" if result.success else "error", "Simplified fallback render finished.", {"success": result.success})
+        return result
 
     def _repair_goal_context(self, plan: TeachingPlan) -> str:
         """Provides enough visual context for repair without resending unrelated project data."""

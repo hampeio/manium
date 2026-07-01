@@ -1,52 +1,10 @@
-﻿const API_BASE = window.desktopApi?.apiBase || "http://127.0.0.1:8765";
+﻿const API_BASE = "http://127.0.0.1:8765";
 
 const elements = {
   imageInput: document.getElementById("imageInput"),
   imageName: document.getElementById("imageName"),
   promptInput: document.getElementById("promptInput"),
   providerInput: document.getElementById("providerInput"),
-  settingsBtn: document.getElementById("settingsBtn"),
-  settingsModal: document.getElementById("settingsModal"),
-  closeSettingsBtn: document.getElementById("closeSettingsBtn"),
-  imageUploadBox: document.getElementById("imageUploadBox"),
-  visionCapabilityHint: document.getElementById("visionCapabilityHint"),
-  modelCapabilitySummary: document.getElementById("modelCapabilitySummary"),
-  modelProfileList: document.getElementById("modelProfileList"),
-  modelProfileName: document.getElementById("modelProfileName"),
-  modelProviderName: document.getElementById("modelProviderName"),
-  modelBaseUrl: document.getElementById("modelBaseUrl"),
-  modelApiKey: document.getElementById("modelApiKey"),
-  modelNameSetting: document.getElementById("modelNameSetting"),
-  modelMaxTokens: document.getElementById("modelMaxTokens"),
-  modelTemperature: document.getElementById("modelTemperature"),
-  modelTopP: document.getElementById("modelTopP"),
-  newModelProfileBtn: document.getElementById("newModelProfileBtn"),
-  saveModelProfileBtn: document.getElementById("saveModelProfileBtn"),
-  deleteModelProfileBtn: document.getElementById("deleteModelProfileBtn"),
-  defaultModelProfileBtn: document.getElementById("defaultModelProfileBtn"),
-  probeModelProfileBtn: document.getElementById("probeModelProfileBtn"),
-  modelSettingsStatus: document.getElementById("modelSettingsStatus"),
-  audioProfileList: document.getElementById("audioProfileList"),
-  audioProfileName: document.getElementById("audioProfileName"),
-  audioProviderName: document.getElementById("audioProviderName"),
-  audioBaseUrl: document.getElementById("audioBaseUrl"),
-  audioApiKey: document.getElementById("audioApiKey"),
-  audioModelName: document.getElementById("audioModelName"),
-  audioResponseMode: document.getElementById("audioResponseMode"),
-  audioTextField: document.getElementById("audioTextField"),
-  audioModelField: document.getElementById("audioModelField"),
-  audioHeaders: document.getElementById("audioHeaders"),
-  audioParameters: document.getElementById("audioParameters"),
-  audioResponseField: document.getElementById("audioResponseField"),
-  newAudioProfileBtn: document.getElementById("newAudioProfileBtn"),
-  saveAudioProfileBtn: document.getElementById("saveAudioProfileBtn"),
-  deleteAudioProfileBtn: document.getElementById("deleteAudioProfileBtn"),
-  defaultAudioProfileBtn: document.getElementById("defaultAudioProfileBtn"),
-  testAudioProfileBtn: document.getElementById("testAudioProfileBtn"),
-  audioSettingsStatus: document.getElementById("audioSettingsStatus"),
-  exportConfigsBtn: document.getElementById("exportConfigsBtn"),
-  exportSecretsInput: document.getElementById("exportSecretsInput"),
-  importConfigsInput: document.getElementById("importConfigsInput"),
   qualityInput: document.getElementById("qualityInput"),
   durationInput: document.getElementById("durationInput"),
   maxDurationMinutesInput: document.getElementById("maxDurationMinutesInput"),
@@ -88,10 +46,8 @@ const elements = {
   projectRootPath: document.getElementById("projectRootPath"),
   quickModeTab: document.getElementById("quickModeTab"),
   workflowModeTab: document.getElementById("workflowModeTab"),
-  styleModeTab: document.getElementById("styleModeTab"),
   quickView: document.getElementById("quickView"),
   workflowView: document.getElementById("workflowView"),
-  styleView: document.getElementById("styleView"),
   nodeLibrary: document.getElementById("nodeLibrary"),
   workflowCanvas: document.getElementById("workflowCanvas"),
   workflowEdges: document.getElementById("workflowEdges"),
@@ -125,49 +81,10 @@ const elements = {
   savePromptBtn: document.getElementById("savePromptBtn"),
   reloadPromptBtn: document.getElementById("reloadPromptBtn"),
   promptPanelStatus: document.getElementById("promptPanelStatus"),
-  stylePresetSelect: document.getElementById("stylePresetSelect"),
-  styleLibraryList: document.getElementById("styleLibraryList"),
-  styleNameInput: document.getElementById("styleNameInput"),
-  styleDescriptionInput: document.getElementById("styleDescriptionInput"),
-  stylePromptInput: document.getElementById("stylePromptInput"),
-  styleSceneCountInput: document.getElementById("styleSceneCountInput"),
-  styleSpeedInput: document.getElementById("styleSpeedInput"),
-  styleVersionSelect: document.getElementById("styleVersionSelect"),
-  styleAnalysisView: document.getElementById("styleAnalysisView"),
-  styleProjectInput: document.getElementById("styleProjectInput"),
-  styleImportInput: document.getElementById("styleImportInput"),
-  saveStylePresetBtn: document.getElementById("saveStylePresetBtn"),
-  applyStylePresetBtn: document.getElementById("applyStylePresetBtn"),
-  exportStylePresetBtn: document.getElementById("exportStylePresetBtn"),
-  rollbackStylePresetBtn: document.getElementById("rollbackStylePresetBtn"),
-  styleLibraryStatus: document.getElementById("styleLibraryStatus"),
   annotationSegmentLabel: document.getElementById("annotationSegmentLabel"),
   segmentAnnotationInput: document.getElementById("segmentAnnotationInput"),
   sendSegmentAnnotationBtn: document.getElementById("sendSegmentAnnotationBtn"),
-  annotationStatus: document.getElementById("annotationStatus"),
-  taskProgressPanel: document.getElementById("taskProgressPanel"),
-  taskStateLabel: document.getElementById("taskStateLabel"),
-  taskProgressText: document.getElementById("taskProgressText"),
-  taskProgressBar: document.getElementById("taskProgressBar"),
-  taskCurrentStep: document.getElementById("taskCurrentStep"),
-  taskRemainingSteps: document.getElementById("taskRemainingSteps"),
-  workflowTaskStateLabel: document.getElementById("workflowTaskStateLabel"),
-  workflowTaskProgressText: document.getElementById("workflowTaskProgressText"),
-  workflowTaskProgressBar: document.getElementById("workflowTaskProgressBar"),
-  workflowTaskCurrentStep: document.getElementById("workflowTaskCurrentStep"),
-  customNodeInput: document.getElementById("customNodeInput"),
-  workflowTutorialBtn: document.getElementById("workflowTutorialBtn"),
-  segmentCodeLabel: document.getElementById("segmentCodeLabel"),
-  segmentCodeInput: document.getElementById("segmentCodeInput"),
-  copySegmentCodeBtn: document.getElementById("copySegmentCodeBtn"),
-  uploadSegmentCodeInput: document.getElementById("uploadSegmentCodeInput"),
-  renderSegmentCodeBtn: document.getElementById("renderSegmentCodeBtn"),
-  segmentTimingPolicy: document.getElementById("segmentTimingPolicy"),
-  segmentManualDuration: document.getElementById("segmentManualDuration"),
-  segmentSyncStatus: document.getElementById("segmentSyncStatus"),
-  segmentCodeHistory: document.getElementById("segmentCodeHistory"),
-  restoreSegmentCodeBtn: document.getElementById("restoreSegmentCodeBtn"),
-  segmentCodeStatus: document.getElementById("segmentCodeStatus")
+  annotationStatus: document.getElementById("annotationStatus")
 };
 
 let selectedOutputDir = "";
@@ -188,15 +105,6 @@ let selectedPromptName = "";
 let selectedSegmentId = "";
 let currentRootDir = "";
 let currentProjectDir = "";
-let currentSegmentCodeInfo = null;
-let modelProfiles = [];
-let defaultModelProfileId = "";
-let editingModelProfileId = "";
-let audioProfiles = [];
-let defaultAudioProfileId = "";
-let editingAudioProfileId = "";
-let styleLibrary = [];
-let selectedStyleId = "";
 
 const categoryLabels = {
   input: "输入",
@@ -207,9 +115,6 @@ const categoryLabels = {
   render: "渲染",
   output: "输出",
   comment: "注释",
-  reference: "参考素材",
-  control: "控制",
-  logic: "逻辑",
 };
 
 const nodeTypeLabels = {
@@ -227,16 +132,6 @@ const nodeTypeLabels = {
   OutputNode: "输出",
   PreviewNode: "预览",
   CommentNode: "注释",
-  VideoInputNode: "视频上传",
-  StyleReferenceNode: "风格参考",
-  CharacterReferenceNode: "角色参考",
-  SceneReferenceNode: "场景参考",
-  CameraMotionNode: "镜头运动",
-  DurationControlNode: "时长控制",
-  ResolutionNode: "分辨率设置",
-  ConditionNode: "条件判断",
-  BranchNode: "多分支",
-  MergeNode: "合并",
 };
 
 const promptNameLabels = {
@@ -263,9 +158,6 @@ const statusLabels = {
   skipped: "已跳过",
   stopped: "已停止",
   paused: "已暂停",
-  stalled: "已卡住",
-  interrupted: "后台已中断",
-  waiting_input: "等待输入",
   stitched: "已拼接",
   awaiting_compose: "等待手动合成",
   pending: "等待中"
@@ -275,310 +167,17 @@ function statusLabel(status) {
   return statusLabels[status] || status || "未知状态";
 }
 
-async function loadStyleLibrary(preferredId = "") {
-  const response = await fetch(`${API_BASE}/style-library`);
-  const payload = await response.json();
-  if (!response.ok) throw new Error(payload.detail || "风格库读取失败。");
-  styleLibrary = payload.styles || [];
-  selectedStyleId = preferredId || selectedStyleId;
-  if (selectedStyleId && !styleLibrary.some((item) => item.id === selectedStyleId)) selectedStyleId = "";
-  elements.stylePresetSelect.innerHTML = '<option value="">不使用风格预设</option>' + styleLibrary.map((item) =>
-    `<option value="${escapeHtml(item.id)}">${escapeHtml(item.name)} · v${item.active_version}</option>`
-  ).join("");
-  elements.stylePresetSelect.value = selectedStyleId;
-  elements.styleLibraryList.innerHTML = styleLibrary.map((item) =>
-    `<button class="prompt-name-item ${item.id === selectedStyleId ? "active" : ""}" data-style-id="${escapeHtml(item.id)}">${escapeHtml(item.name)} · v${item.active_version}</button>`
-  ).join("") || '<div class="path-line">风格库为空。</div>';
-  elements.styleLibraryList.querySelectorAll("[data-style-id]").forEach((button) => {
-    button.addEventListener("click", () => selectStyle(button.dataset.styleId));
-  });
-  if (selectedStyleId) selectStyle(selectedStyleId);
-}
-
-function selectStyle(styleId) {
-  selectedStyleId = styleId;
-  const style = styleLibrary.find((item) => item.id === styleId);
-  if (!style) return;
-  const preset = style.preset || {};
-  elements.styleNameInput.value = style.name || "";
-  elements.styleDescriptionInput.value = preset.style_description || style.description || "";
-  elements.stylePromptInput.value = preset.prompt_preset || "";
-  elements.styleSceneCountInput.value = preset.scene_count || 1;
-  elements.styleSpeedInput.value = preset.animation_speed || "";
-  elements.styleAnalysisView.textContent = JSON.stringify({ analysis: style.analysis, example_code: preset.example_code || "" }, null, 2);
-  elements.styleVersionSelect.innerHTML = (style.versions || []).map((item) =>
-    `<option value="${item.version}" ${item.version === style.active_version ? "selected" : ""}>版本 ${item.version} · ${escapeHtml(item.created_at || "")}</option>`
-  ).join("");
-  elements.stylePresetSelect.value = styleId;
-  elements.styleLibraryList.querySelectorAll("[data-style-id]").forEach((button) => button.classList.toggle("active", button.dataset.styleId === styleId));
-}
-
-function applySelectedStyle() {
-  const style = styleLibrary.find((item) => item.id === (elements.stylePresetSelect.value || selectedStyleId));
-  if (!style) return;
-  selectedStyleId = style.id;
-  if (elements.sceneCountModeInput && elements.sceneCountInput) {
-    elements.sceneCountModeInput.value = "manual";
-    elements.sceneCountInput.disabled = false;
-    elements.sceneCountInput.value = String(style.preset?.scene_count || elements.sceneCountInput.value);
-  }
-  elements.styleLibraryStatus.textContent = `已选择“${style.name}”，生成时会自动注入风格预设。`;
-}
-
-async function learnStyleFromFiles(files) {
-  if (!files.length) return;
-  const form = new FormData();
-  [...files].forEach((file) => form.append("files", file));
-  form.append("style_name", elements.styleNameInput.value.trim() || "自动学习风格");
-  form.append("description", elements.styleDescriptionInput.value.trim());
-  form.append("existing_style_id", selectedStyleId);
-  form.append("model_profile_id", elements.providerInput.value || "");
-  form.append("use_ai", "true");
-  elements.styleLibraryStatus.textContent = "正在提取工程证据，并调用当前模型 API 学习风格...";
-  const response = await fetch(`${API_BASE}/style-library/analyze`, { method: "POST", body: form });
-  const style = await response.json();
-  if (!response.ok) throw new Error(style.detail || "工程分析失败。");
-  await loadStyleLibrary(style.id);
-  const modelStatus = style.analysis?.model_analysis?.status;
-  elements.styleLibraryStatus.textContent = modelStatus === "success"
-    ? `AI 学习完成：${style.name} v${style.active_version} · ${style.analysis.model_analysis.model}`
-    : `模型调用失败，已保留本地分析结果：${style.analysis?.model_analysis?.message || "未知错误"}`;
-}
-
-async function saveStylePreset() {
-  if (!selectedStyleId) throw new Error("请先学习或选择一个风格。");
-  const payload = {
-    name: elements.styleNameInput.value.trim(),
-    style_description: elements.styleDescriptionInput.value.trim(),
-    prompt_preset: elements.stylePromptInput.value,
-    scene_count: Number(elements.styleSceneCountInput.value || 1),
-    animation_speed: elements.styleSpeedInput.value.trim(),
-  };
-  const response = await fetch(`${API_BASE}/style-library/${selectedStyleId}`, {
-    method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload)
-  });
-  const style = await response.json();
-  if (!response.ok) throw new Error(style.detail || "保存失败。");
-  await loadStyleLibrary(style.id);
-  elements.styleLibraryStatus.textContent = `已保存为版本 ${style.active_version}。`;
-}
-
-function updateTaskProgress(task, workflowMode = false) {
-  const prefix = workflowMode ? "workflowTask" : "task";
-  const stateLabel = elements[`${prefix}StateLabel`];
-  const progressText = elements[`${prefix}ProgressText`];
-  const progressBar = elements[`${prefix}ProgressBar`];
-  const currentStep = elements[`${prefix}CurrentStep`];
-  const percent = Math.max(0, Math.min(100, Number(task?.progress_percent || 0)));
-  if (stateLabel) stateLabel.textContent = `当前状态：${statusLabel(task?.state || "queued")}`;
-  if (progressText) progressText.textContent = `${percent}%`;
-  if (progressBar) progressBar.value = percent;
-  if (currentStep) currentStep.textContent = task?.error ? `${task.current_step || "失败"}：${task.error}` : (task?.current_step || "等待后台更新");
-  if (!workflowMode && elements.taskRemainingSteps) {
-    const remaining = task?.remaining_steps || [];
-    elements.taskRemainingSteps.textContent = remaining.length ? `剩余阶段：${remaining.join("、")}` : "全部阶段已完成。";
-  }
-  elements.taskProgressPanel?.classList.toggle("is-failed", ["failed", "stalled", "interrupted"].includes(task?.state));
-}
-
 function applyDefaultTestSettings() {
   if (!elements.promptInput.value.trim()) {
     elements.promptInput.value = "介绍铁路路基道床的组成、功能、荷载传递、排水、弹性缓冲和施工整形过程。";
   }
+  elements.providerInput.value = "deepseek";
   elements.qualityInput.value = "low";
-}
-
-function currentModelProfile() {
-  return modelProfiles.find((profile) => profile.id === elements.providerInput.value) || null;
-}
-
-function hasModelCapability(name) {
-  return Boolean(currentModelProfile()?.capabilities?.[name]);
-}
-
-function applyActiveModelProfile() {
-  const profile = currentModelProfile();
-  if (!profile) return;
-  elements.baseUrlInput.value = profile.api_base_url || "";
-  elements.modelInput.value = profile.model_name || "";
-  elements.apiKeyInput.value = "";
-  elements.apiKeyInput.placeholder = profile.api_key_configured ? "已配置（在设置中修改）" : "未配置";
-  const capabilities = profile.capabilities || {};
-  const visionReady = Boolean(capabilities.vision && capabilities.image_upload && capabilities.multimodal_input);
-  elements.imageInput.disabled = !visionReady;
-  elements.imageUploadBox?.classList.toggle("capability-disabled", !visionReady);
-  elements.visionCapabilityHint.textContent = visionReady
-    ? "当前模型支持 Vision：可上传、分析并批注图片。"
-    : "当前所选模型不支持图片理解（Vision）能力，请切换至支持读图的模型后再使用该功能。";
-  const labels = {
-    text_generation: "文本", vision: "Vision", image_upload: "图片上传", multimodal_input: "多模态",
-    image_annotation: "图片批注", function_calling: "Function Calling", json_output: "JSON",
-    streaming: "Streaming", audio: "音频",
-  };
-  elements.modelCapabilitySummary.innerHTML = Object.entries(labels).map(([key, label]) =>
-    `<span class="capability-badge ${capabilities[key] ? "enabled" : ""}">${label}</span>`
-  ).join("");
-  window.currentModelProfileId = profile.id;
-  window.currentModelCapabilities = capabilities;
-  window.annotationEditor?.setCapabilities(capabilities, profile.id);
-  if (Object.keys(nodeDefinitions).length) renderNodeLibrary(Object.values(nodeDefinitions));
-  if (!visionReady && elements.imageInput.files?.length) {
-    elements.imageInput.value = "";
-    elements.imageName.textContent = "选择图片";
-    window.annotationEditor?.setImagePreview(null);
+  if (!elements.baseUrlInput.value.trim()) {
+    elements.baseUrlInput.value = "https://api.deepseek.com/v1";
   }
-}
-
-async function loadModelProfiles(preferredId = "") {
-  const response = await fetch(`${API_BASE}/model-configs`);
-  const payload = await response.json();
-  if (!response.ok) throw new Error(payload.detail || "模型配置读取失败。");
-  modelProfiles = payload.profiles || [];
-  defaultModelProfileId = payload.default_id || modelProfiles[0]?.id || "";
-  elements.providerInput.innerHTML = modelProfiles.map((profile) =>
-    `<option value="${escapeHtml(profile.id)}">${escapeHtml(profile.name)} · ${escapeHtml(profile.model_name)}</option>`
-  ).join("");
-  elements.providerInput.value = preferredId && modelProfiles.some((item) => item.id === preferredId)
-    ? preferredId : defaultModelProfileId;
-  applyActiveModelProfile();
-  renderModelProfileList();
-}
-
-function renderModelProfileList() {
-  if (!elements.modelProfileList) return;
-  elements.modelProfileList.innerHTML = modelProfiles.map((profile) =>
-    `<option value="${escapeHtml(profile.id)}">${profile.id === defaultModelProfileId ? "★ " : ""}${escapeHtml(profile.name)} · ${escapeHtml(profile.model_name)}</option>`
-  ).join("");
-  if (editingModelProfileId) elements.modelProfileList.value = editingModelProfileId;
-}
-
-function editModelProfile(profileId) {
-  editingModelProfileId = profileId || "";
-  const profile = modelProfiles.find((item) => item.id === profileId);
-  elements.modelProfileName.value = profile?.name || "";
-  elements.modelProviderName.value = profile?.provider_name || "openai-compatible";
-  elements.modelBaseUrl.value = profile?.api_base_url || "";
-  elements.modelApiKey.value = "";
-  elements.modelApiKey.placeholder = profile?.api_key_configured ? "已配置；留空保留" : "输入 API Key";
-  elements.modelNameSetting.value = profile?.model_name || "";
-  elements.modelMaxTokens.value = profile?.parameters?.max_tokens || 8192;
-  elements.modelTemperature.value = profile?.parameters?.temperature ?? 0.25;
-  elements.modelTopP.value = profile?.parameters?.top_p ?? 1;
-  document.querySelectorAll("[data-model-capability]").forEach((input) => {
-    input.checked = Boolean(profile?.capabilities?.[input.dataset.modelCapability]);
-  });
-  elements.modelSettingsStatus.textContent = profile
-    ? `能力来源：${profile.capability_source || "manual"}；${profile.probe?.message || "尚未探测。"}`
-    : "正在创建新模型配置。";
-  renderModelProfileList();
-}
-
-function modelProfilePayload() {
-  const capabilities = {};
-  document.querySelectorAll("[data-model-capability]").forEach((input) => {
-    capabilities[input.dataset.modelCapability] = input.checked;
-  });
-  return {
-    id: editingModelProfileId || undefined,
-    name: elements.modelProfileName.value.trim(),
-    provider_name: elements.modelProviderName.value.trim() || "openai-compatible",
-    api_base_url: elements.modelBaseUrl.value.trim(),
-    api_key: elements.modelApiKey.value,
-    model_name: elements.modelNameSetting.value.trim(),
-    capabilities,
-    capability_source: "manual",
-    parameters: {
-      max_tokens: Number(elements.modelMaxTokens.value || 8192),
-      temperature: Number(elements.modelTemperature.value || 0.25),
-      top_p: Number(elements.modelTopP.value || 1),
-    },
-  };
-}
-
-async function saveModelProfile() {
-  elements.modelSettingsStatus.textContent = "正在保存模型配置...";
-  const response = await fetch(`${API_BASE}/model-configs`, {
-    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(modelProfilePayload()),
-  });
-  const payload = await response.json();
-  if (!response.ok) throw new Error(payload.detail || "模型配置保存失败。");
-  editingModelProfileId = payload.profile.id;
-  await loadModelProfiles(elements.providerInput.value || payload.profile.id);
-  editModelProfile(editingModelProfileId);
-  elements.modelSettingsStatus.textContent = "模型配置已保存。";
-}
-
-async function loadAudioProfiles(preferredId = "") {
-  const response = await fetch(`${API_BASE}/audio-configs`);
-  const payload = await response.json();
-  if (!response.ok) throw new Error(payload.detail || "音频配置读取失败。");
-  audioProfiles = payload.profiles || [];
-  defaultAudioProfileId = payload.default_id || "";
-  editingAudioProfileId = preferredId && audioProfiles.some((item) => item.id === preferredId) ? preferredId : (editingAudioProfileId || defaultAudioProfileId);
-  elements.audioProfileList.innerHTML = audioProfiles.map((profile) =>
-    `<option value="${escapeHtml(profile.id)}">${profile.id === defaultAudioProfileId ? "★ " : ""}${escapeHtml(profile.name)} · ${escapeHtml(profile.model_name || profile.provider_name)}</option>`
-  ).join("");
-  if (editingAudioProfileId) elements.audioProfileList.value = editingAudioProfileId;
-  const active = audioProfiles.find((item) => item.id === defaultAudioProfileId);
-  if (elements.audioStatus) elements.audioStatus.textContent = active
-    ? `配音 API：${active.provider_name} / ${active.model_name || "未指定模型"} · 最近状态 ${active.last_call_status}`
-    : "配音 API：未配置，将生成无旁白视频";
-}
-
-function editAudioProfile(profileId) {
-  editingAudioProfileId = profileId || "";
-  const profile = audioProfiles.find((item) => item.id === profileId);
-  elements.audioProfileName.value = profile?.name || "";
-  elements.audioProviderName.value = profile?.provider_name || "";
-  elements.audioBaseUrl.value = profile?.api_base_url || "";
-  elements.audioApiKey.value = "";
-  elements.audioApiKey.placeholder = profile?.api_key_configured ? "已配置；留空保留" : "输入 API Key";
-  elements.audioModelName.value = profile?.model_name || "";
-  elements.audioResponseMode.value = profile?.response_mode || "binary";
-  elements.audioTextField.value = profile?.text_field || "text";
-  elements.audioModelField.value = profile?.model_field || "model";
-  elements.audioHeaders.value = JSON.stringify(profile?.request_headers || {}, null, 2);
-  elements.audioParameters.value = JSON.stringify(profile?.request_parameters || {}, null, 2);
-  elements.audioResponseField.value = profile?.response_audio_field || "audio";
-  elements.audioSettingsStatus.textContent = profile
-    ? `是否已配置：是；Provider：${profile.provider_name}；模型：${profile.model_name || "未指定"}；连通性：${profile.probe?.status || "never"}；最近调用：${profile.last_call_status} ${profile.last_call_message || ""}`
-    : "正在创建新音频配置；未保存时系统会自动跳过旁白。";
-}
-
-function parseJsonInput(value, label) {
-  try { return JSON.parse(value || "{}"); }
-  catch (error) { throw new Error(`${label}不是有效 JSON：${error.message}`); }
-}
-
-async function saveAudioProfile() {
-  const payload = {
-    id: editingAudioProfileId || undefined,
-    name: elements.audioProfileName.value.trim(), provider_name: elements.audioProviderName.value.trim(),
-    api_base_url: elements.audioBaseUrl.value.trim(), api_key: elements.audioApiKey.value,
-    model_name: elements.audioModelName.value.trim(), response_mode: elements.audioResponseMode.value,
-    text_field: elements.audioTextField.value.trim() || "text", model_field: elements.audioModelField.value.trim() || "model",
-    request_headers: parseJsonInput(elements.audioHeaders.value, "请求 Header"),
-    request_parameters: parseJsonInput(elements.audioParameters.value, "请求参数"),
-    response_audio_field: elements.audioResponseField.value.trim() || "audio", enabled: true,
-  };
-  const response = await fetch(`${API_BASE}/audio-configs`, {
-    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload),
-  });
-  const result = await response.json();
-  if (!response.ok) throw new Error(result.detail || "音频配置保存失败。");
-  editingAudioProfileId = result.profile.id;
-  await loadAudioProfiles(editingAudioProfileId);
-  editAudioProfile(editingAudioProfileId);
-  elements.audioSettingsStatus.textContent = "音频配置已保存。";
-}
-
-async function initializeConfigurations() {
-  try {
-    await Promise.all([loadModelProfiles(), loadAudioProfiles()]);
-  } catch (error) {
-    appendLog(`配置初始化失败：${error.message}`);
-    elements.visionCapabilityHint.textContent = "模型能力读取失败，图片功能已停用。";
-    elements.imageInput.disabled = true;
+  if (!elements.modelInput.value.trim()) {
+    elements.modelInput.value = "deepseek-v4-pro";
   }
 }
 
@@ -826,7 +425,6 @@ function renderSegments(segments, fallbackVideoPath) {
       selectedSegmentId = button.dataset.segmentId || "";
       const selectedSegment = currentSegments.find((segment) => segment.id === selectedSegmentId);
       updateSegmentPreviewControls(selectedSegment);
-      loadSelectedSegmentCode(selectedSegmentId);
       if (elements.editStatus) {
         elements.editStatus.textContent = selectedSegmentId ? `已选择 ${selectedSegmentId}，提交修改将只替换该片段。` : "未选择片段。";
       }
@@ -853,7 +451,6 @@ function bindComposeVideoButton() {
     elements.segmentPreviewList.querySelectorAll(".segment-chip, .compose-chip").forEach((item) => item.classList.remove("active"));
     button.classList.add("active");
     selectedSegmentId = "final";
-    clearSegmentCodeEditor("总体视频没有独立的单段 Manim 代码，请选择一个分镜。");
     updateSegmentPreviewControls(null);
     updateAnnotationSelection(null);
     if (elements.editStatus) {
@@ -892,22 +489,16 @@ async function submitSegmentAnnotation() {
     elements.annotationStatus.textContent = "当前项目路径不可用。";
     return;
   }
-  const savedAnnotation = await window.annotationEditor?.ensureSegmentAnnotation(note);
-  const isImageAnnotation = savedAnnotation?.shape_data?.target_kind === "image";
-  if (isImageAnnotation && !(hasModelCapability("vision") && hasModelCapability("image_upload") && hasModelCapability("multimodal_input") && hasModelCapability("image_annotation"))) {
-    elements.annotationStatus.textContent = "当前所选模型不支持图片理解（Vision）能力，请切换至支持读图的模型后再使用该功能。";
-    return;
-  }
+  await window.annotationEditor?.ensureSegmentAnnotation(note);
   const form = new FormData();
   form.append("source_project_dir", lastQuickResult.project_dir);
   form.append("segment_id", targetSegmentId);
-  form.append("model_profile_id", elements.providerInput.value);
+  form.append("provider", elements.providerInput.value);
   form.append("api_key", elements.apiKeyInput.value);
   form.append("base_url", elements.baseUrlInput.value);
   form.append("model", elements.modelInput.value);
   form.append("quality", elements.qualityInput.value);
-  form.append("use_project_image", isImageAnnotation ? "true" : "false");
-  form.append("edit_prompt", `用户对当前视频片段的标注与修改要求：${note}\n结构化批注：${JSON.stringify(savedAnnotation || {})}\n请只重做这个片段，保留整体教学目标，并显著改变与相邻片段重复的视觉构图。`);
+  form.append("edit_prompt", `用户对当前视频片段的标注与修改要求：${note}\n请只重做这个片段，保留整体教学目标，并显著改变与相邻片段重复的视觉构图。`);
   elements.annotationStatus.textContent = `已提交 ${targetSegmentId} 的修正任务，当前生成不会被暂停。`;
   const response = await fetch(`${API_BASE}/replace_segment_async`, { method: "POST", body: form });
   const task = await response.json();
@@ -921,7 +512,6 @@ async function monitorBackgroundTask(taskId, label, targetSegmentId = "") {
       const response = await fetch(`${API_BASE}/tasks/${taskId}`);
       const task = await response.json();
       if (!response.ok) throw new Error(task.detail || "后台任务查询失败。");
-      updateTaskProgress(task);
       if (task.partial_result) {
         applyNonIntrusivePartialResult(task.partial_result);
         await refreshProjectStatus(task.project_dir || task.partial_result?.project_dir || lastQuickResult?.project_dir);
@@ -936,7 +526,7 @@ async function monitorBackgroundTask(taskId, label, targetSegmentId = "") {
         }
         return;
       }
-      if (["failed", "stalled", "interrupted"].includes(task.state)) {
+      if (task.state === "failed") {
         throw new Error(task.error || `${label} 失败。`);
       }
       await new Promise((resolve) => setTimeout(resolve, 1800));
@@ -1005,96 +595,6 @@ function updateSegmentPreviewControls(segment) {
   if (elements.correctedSegmentPreviewBtn) {
     elements.correctedSegmentPreviewBtn.disabled = !correctedPath;
     elements.correctedSegmentPreviewBtn.dataset.videoPath = correctedPath;
-  }
-}
-
-function clearSegmentCodeEditor(message = "请先选择一个分镜片段。") {
-  currentSegmentCodeInfo = null;
-  if (elements.segmentCodeLabel) elements.segmentCodeLabel.textContent = message;
-  if (elements.segmentCodeInput) elements.segmentCodeInput.value = "";
-  if (elements.copySegmentCodeBtn) elements.copySegmentCodeBtn.disabled = true;
-  if (elements.renderSegmentCodeBtn) elements.renderSegmentCodeBtn.disabled = true;
-  if (elements.segmentCodeHistory) elements.segmentCodeHistory.innerHTML = '<option value="">历史版本</option>';
-  if (elements.restoreSegmentCodeBtn) elements.restoreSegmentCodeBtn.disabled = true;
-  if (elements.segmentSyncStatus) elements.segmentSyncStatus.textContent = "视频时长：-- · 音频时长：-- · 对齐状态：--";
-}
-
-async function loadSelectedSegmentCode(segmentId) {
-  const projectDir = currentProjectDir || lastQuickResult?.project_dir || "";
-  if (!segmentId || segmentId === "final" || !projectDir) {
-    clearSegmentCodeEditor();
-    return;
-  }
-  elements.segmentCodeStatus.textContent = `正在读取 ${segmentId} 的代码...`;
-  try {
-    const response = await fetch(`${API_BASE}/project/segment-code?project_dir=${encodeURIComponent(projectDir)}&segment_id=${encodeURIComponent(segmentId)}`);
-    const payload = await response.json();
-    if (!response.ok) throw new Error(payload.detail || "读取片段代码失败。");
-    if (selectedSegmentId !== segmentId) return;
-    currentSegmentCodeInfo = payload;
-    elements.segmentCodeLabel.textContent = `当前编辑：${payload.segment_id} · ${payload.title || "未命名"} · 代码版本 v${payload.code_revision}`;
-    elements.segmentCodeInput.value = payload.code || "";
-    elements.copySegmentCodeBtn.disabled = false;
-    elements.renderSegmentCodeBtn.disabled = false;
-    elements.segmentTimingPolicy.value = payload.timing_policy || "auto_audio";
-    elements.segmentManualDuration.disabled = elements.segmentTimingPolicy.value !== "manual";
-    elements.segmentManualDuration.value = payload.manual_duration || payload.audio_duration || payload.video_duration || "";
-    const alignedText = payload.aligned ? "已对齐" : (payload.needs_audio_stretch ? "需要自动适配" : "未对齐");
-    elements.segmentSyncStatus.textContent = `Manim 视频时长：${Number(payload.video_duration || 0).toFixed(2)} 秒 · 音频时长：${Number(payload.audio_duration || 0).toFixed(2)} 秒 · ${alignedText}`;
-    elements.segmentCodeHistory.innerHTML = '<option value="">历史版本</option>' + (payload.history || []).map((item, index) =>
-      `<option value="${index}">v${item.revision} · ${escapeHtml(item.saved_at || "")}</option>`
-    ).join("");
-    elements.restoreSegmentCodeBtn.disabled = true;
-    elements.segmentCodeStatus.textContent = "修改和重渲染只影响当前片段，不会自动合成总体视频。";
-  } catch (error) {
-    clearSegmentCodeEditor(`片段 ${segmentId} 的代码暂不可用。`);
-    elements.segmentCodeStatus.textContent = `读取失败：${error.message}`;
-  }
-}
-
-async function submitSegmentCodeRender() {
-  const projectDir = currentProjectDir || lastQuickResult?.project_dir || "";
-  const segmentId = selectedSegmentId;
-  if (!projectDir || !segmentId || segmentId === "final") throw new Error("请先选择一个分镜片段。");
-  const code = elements.segmentCodeInput.value;
-  if (!code.trim()) throw new Error("Manim 代码不能为空。");
-  const form = new FormData();
-  form.append("project_dir", projectDir);
-  form.append("segment_id", segmentId);
-  form.append("manim_code", code);
-  form.append("quality", elements.qualityInput.value || "low");
-  form.append("timing_policy", elements.segmentTimingPolicy.value);
-  form.append("manual_duration", elements.segmentManualDuration.value || "0");
-  elements.renderSegmentCodeBtn.disabled = true;
-  elements.segmentCodeStatus.textContent = `正在校验并重渲染 ${segmentId}...`;
-  const response = await fetch(`${API_BASE}/render_segment_code_async`, { method: "POST", body: form });
-  const task = await response.json();
-  if (!response.ok) throw new Error(task.detail || "提交代码渲染任务失败。");
-  await pollSegmentCodeTask(task.task_id, segmentId, projectDir);
-}
-
-async function pollSegmentCodeTask(taskId, segmentId, projectDir) {
-  while (true) {
-    const response = await fetch(`${API_BASE}/tasks/${taskId}`);
-    const task = await response.json();
-    if (!response.ok) throw new Error(task.detail || "片段渲染状态查询失败。");
-    updateTaskProgress(task);
-    const latestLog = (task.logs || []).at(-1);
-    if (latestLog) elements.segmentCodeStatus.textContent = latestLog;
-    if (task.partial_result) applyNonIntrusivePartialResult(task.partial_result);
-    if (task.state === "succeeded") {
-      await refreshProjectStatus(projectDir);
-      await loadSelectedSegmentCode(segmentId);
-      const updated = currentSegments.find((item) => item.id === segmentId);
-      const preview = updated?.corrected_preview_path || updated?.preview_video_path || updated?.video_path;
-      if (preview) playVideoPath(preview, appendLog);
-      elements.segmentCodeStatus.textContent = `${segmentId} 已重渲染并刷新预览；总体视频等待手动合成。`;
-      return;
-    }
-    if (["failed", "stalled", "interrupted"].includes(task.state)) {
-      throw new Error(task.error || "当前片段渲染失败。");
-    }
-    await new Promise((resolve) => setTimeout(resolve, 1200));
   }
 }
 
@@ -1380,16 +880,12 @@ function applyWorkflowResult(result) {
 
 function setMode(mode) {
   const workflowMode = mode === "workflow";
-  const styleMode = mode === "style";
-  elements.quickView.classList.toggle("hidden", workflowMode || styleMode);
+  elements.quickView.classList.toggle("hidden", workflowMode);
   elements.workflowView.classList.toggle("hidden", !workflowMode);
-  elements.styleView.classList.toggle("hidden", !styleMode);
-  elements.quickModeTab.classList.toggle("active", !workflowMode && !styleMode);
+  elements.quickModeTab.classList.toggle("active", !workflowMode);
   elements.workflowModeTab.classList.toggle("active", workflowMode);
-  elements.styleModeTab.classList.toggle("active", styleMode);
-  elements.generateBtn.style.display = workflowMode || styleMode ? "none" : "inline-flex";
+  elements.generateBtn.style.display = workflowMode ? "none" : "inline-flex";
   if (workflowMode) renderWorkflow();
-  if (styleMode) loadStyleLibrary(selectedStyleId).catch((error) => elements.styleLibraryStatus.textContent = error.message);
 }
 
 async function refreshProjectStatus(projectDir) {
@@ -1415,7 +911,6 @@ async function pollTask(taskId) {
     const task = await response.json();
     if (!response.ok) throw new Error(task.detail || "任务轮询失败。");
 
-    updateTaskProgress(task);
     renderTaskLogs(task.logs || []);
     if (task.partial_result) applyPartialResult(task.partial_result);
     await refreshProjectStatus(task.project_dir || task.partial_result?.project_dir || lastQuickResult?.project_dir);
@@ -1427,7 +922,7 @@ async function pollTask(taskId) {
       return;
     }
 
-    if (["failed", "stalled", "interrupted"].includes(task.state)) {
+    if (task.state === "failed") {
       throw new Error(task.error || "生成失败。");
     }
 
@@ -1436,138 +931,8 @@ async function pollTask(taskId) {
 }
 elements.imageInput.addEventListener("change", () => {
   const file = elements.imageInput.files[0];
-  if (file && !(hasModelCapability("vision") && hasModelCapability("image_upload") && hasModelCapability("multimodal_input"))) {
-    elements.imageInput.value = "";
-    elements.imageName.textContent = "选择图片";
-    window.annotationEditor?.setImagePreview(null);
-    elements.visionCapabilityHint.textContent = "当前所选模型不支持图片理解（Vision）能力，请切换至支持读图的模型后再使用该功能。";
-    return;
-  }
   elements.imageName.textContent = file ? file.name : "选择图片";
   window.annotationEditor?.setImagePreview(file || null);
-});
-
-elements.providerInput.addEventListener("change", applyActiveModelProfile);
-elements.settingsBtn?.addEventListener("click", async () => {
-  elements.settingsModal?.classList.remove("hidden");
-  await Promise.all([loadModelProfiles(elements.providerInput.value), loadAudioProfiles()]);
-  editModelProfile(elements.providerInput.value);
-  editAudioProfile(editingAudioProfileId || defaultAudioProfileId);
-});
-elements.closeSettingsBtn?.addEventListener("click", () => elements.settingsModal?.classList.add("hidden"));
-elements.modelProfileList?.addEventListener("change", () => editModelProfile(elements.modelProfileList.value));
-elements.newModelProfileBtn?.addEventListener("click", () => editModelProfile(""));
-elements.saveModelProfileBtn?.addEventListener("click", () => saveModelProfile().catch((error) => { elements.modelSettingsStatus.textContent = `保存失败：${error.message}`; }));
-elements.deleteModelProfileBtn?.addEventListener("click", async () => {
-  if (!editingModelProfileId) return;
-  const response = await fetch(`${API_BASE}/model-configs/${encodeURIComponent(editingModelProfileId)}`, { method: "DELETE" });
-  const payload = await response.json();
-  if (!response.ok) { elements.modelSettingsStatus.textContent = `删除失败：${payload.detail}`; return; }
-  editingModelProfileId = "";
-  await loadModelProfiles();
-  editModelProfile(elements.providerInput.value);
-});
-elements.defaultModelProfileBtn?.addEventListener("click", async () => {
-  if (!editingModelProfileId) return;
-  const response = await fetch(`${API_BASE}/model-configs/${encodeURIComponent(editingModelProfileId)}/default`, { method: "POST" });
-  const payload = await response.json();
-  if (!response.ok) { elements.modelSettingsStatus.textContent = `设置失败：${payload.detail}`; return; }
-  await loadModelProfiles(editingModelProfileId);
-  editModelProfile(editingModelProfileId);
-  elements.modelSettingsStatus.textContent = "已设为默认模型。";
-});
-elements.probeModelProfileBtn?.addEventListener("click", async () => {
-  if (!editingModelProfileId) return;
-  elements.modelSettingsStatus.textContent = "正在探测文本、Vision、JSON、Function Calling 与 Streaming，请稍候...";
-  const response = await fetch(`${API_BASE}/model-configs/${encodeURIComponent(editingModelProfileId)}/probe`, { method: "POST" });
-  const payload = await response.json();
-  if (!response.ok) { elements.modelSettingsStatus.textContent = `探测失败：${payload.detail}`; return; }
-  await loadModelProfiles(elements.providerInput.value);
-  editModelProfile(editingModelProfileId);
-});
-
-elements.audioProfileList?.addEventListener("change", () => editAudioProfile(elements.audioProfileList.value));
-elements.newAudioProfileBtn?.addEventListener("click", () => editAudioProfile(""));
-elements.saveAudioProfileBtn?.addEventListener("click", () => saveAudioProfile().catch((error) => { elements.audioSettingsStatus.textContent = `保存失败：${error.message}`; }));
-elements.deleteAudioProfileBtn?.addEventListener("click", async () => {
-  if (!editingAudioProfileId) return;
-  const response = await fetch(`${API_BASE}/audio-configs/${encodeURIComponent(editingAudioProfileId)}`, { method: "DELETE" });
-  const payload = await response.json();
-  if (!response.ok) { elements.audioSettingsStatus.textContent = `删除失败：${payload.detail}`; return; }
-  editingAudioProfileId = "";
-  await loadAudioProfiles();
-  editAudioProfile(defaultAudioProfileId);
-});
-elements.defaultAudioProfileBtn?.addEventListener("click", async () => {
-  if (!editingAudioProfileId) return;
-  const response = await fetch(`${API_BASE}/audio-configs/${encodeURIComponent(editingAudioProfileId)}/default`, { method: "POST" });
-  const payload = await response.json();
-  if (!response.ok) { elements.audioSettingsStatus.textContent = `设置失败：${payload.detail}`; return; }
-  await loadAudioProfiles(editingAudioProfileId);
-  editAudioProfile(editingAudioProfileId);
-});
-elements.testAudioProfileBtn?.addEventListener("click", async () => {
-  if (!editingAudioProfileId) return;
-  elements.audioSettingsStatus.textContent = "正在测试音频接口...";
-  const response = await fetch(`${API_BASE}/audio-configs/${encodeURIComponent(editingAudioProfileId)}/test`, { method: "POST" });
-  const payload = await response.json();
-  elements.audioSettingsStatus.textContent = response.ok && payload.success ? payload.message : `测试失败：${payload.error || payload.detail || payload.message}`;
-  await loadAudioProfiles(editingAudioProfileId);
-});
-elements.exportConfigsBtn?.addEventListener("click", async () => {
-  const response = await fetch(`${API_BASE}/configurations?include_secrets=${elements.exportSecretsInput?.checked ? "true" : "false"}`);
-  const payload = await response.json();
-  const url = URL.createObjectURL(new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" }));
-  const anchor = document.createElement("a"); anchor.href = url; anchor.download = "manim-provider-configs.json"; anchor.click(); URL.revokeObjectURL(url);
-});
-elements.importConfigsInput?.addEventListener("change", async () => {
-  const file = elements.importConfigsInput.files[0]; if (!file) return;
-  try {
-    const response = await fetch(`${API_BASE}/configurations/import`, { method: "POST", headers: { "Content-Type": "application/json" }, body: await file.text() });
-    const payload = await response.json(); if (!response.ok) throw new Error(payload.detail || "导入失败。");
-    await Promise.all([loadModelProfiles(), loadAudioProfiles()]);
-    elements.modelSettingsStatus.textContent = "配置导入完成。";
-  } catch (error) { elements.modelSettingsStatus.textContent = `导入失败：${error.message}`; }
-  finally { elements.importConfigsInput.value = ""; }
-});
-
-elements.copySegmentCodeBtn?.addEventListener("click", async () => {
-  await navigator.clipboard.writeText(elements.segmentCodeInput.value || "");
-  elements.segmentCodeStatus.textContent = `已复制 ${selectedSegmentId || "当前片段"} 的 Manim 代码。`;
-});
-
-elements.uploadSegmentCodeInput?.addEventListener("change", async () => {
-  const file = elements.uploadSegmentCodeInput.files[0];
-  if (!file) return;
-  elements.segmentCodeInput.value = await file.text();
-  elements.segmentCodeStatus.textContent = `已载入 ${file.name}，点击“保存并重渲染当前片段”后生效。`;
-  elements.uploadSegmentCodeInput.value = "";
-});
-
-elements.segmentTimingPolicy?.addEventListener("change", () => {
-  elements.segmentManualDuration.disabled = elements.segmentTimingPolicy.value !== "manual";
-});
-
-elements.segmentCodeHistory?.addEventListener("change", () => {
-  elements.restoreSegmentCodeBtn.disabled = elements.segmentCodeHistory.value === "";
-});
-
-elements.restoreSegmentCodeBtn?.addEventListener("click", () => {
-  const index = Number(elements.segmentCodeHistory.value);
-  const historical = currentSegmentCodeInfo?.history?.[index];
-  if (!historical?.code) return;
-  elements.segmentCodeInput.value = historical.code;
-  elements.segmentCodeStatus.textContent = `已载入历史版本 v${historical.revision}；重新渲染后才会成为当前版本。`;
-});
-
-elements.renderSegmentCodeBtn?.addEventListener("click", async () => {
-  try {
-    await submitSegmentCodeRender();
-  } catch (error) {
-    elements.segmentCodeStatus.textContent = `重渲染失败：${error.message}`;
-  } finally {
-    elements.renderSegmentCodeBtn.disabled = !selectedSegmentId || selectedSegmentId === "final";
-  }
 });
 
 elements.outputBtn.addEventListener("click", async () => {
@@ -1697,7 +1062,6 @@ document.querySelectorAll(".workflow-result-tab").forEach((button) => {
 
 elements.quickModeTab.addEventListener("click", () => setMode("quick"));
 elements.workflowModeTab.addEventListener("click", () => setMode("workflow"));
-elements.styleModeTab.addEventListener("click", () => setMode("style"));
 if (elements.maxDurationMinutesInput) {
   elements.maxDurationMinutesInput.addEventListener("change", () => {
     const seconds = selectedTotalDurationSeconds();
@@ -1749,10 +1113,6 @@ if (elements.savePromptBtn) {
 }
 
 elements.generateBtn.addEventListener("click", async () => {
-  if (elements.imageInput.files[0] && !(hasModelCapability("vision") && hasModelCapability("image_upload") && hasModelCapability("multimodal_input"))) {
-    appendLog("当前所选模型不支持图片理解（Vision）能力，请切换至支持读图的模型后再使用该功能。");
-    return;
-  }
   elements.generateBtn.disabled = true;
   elements.logOutput.textContent = "";
   elements.storyboardView.textContent = "";
@@ -1798,12 +1158,8 @@ elements.generateBtn.addEventListener("click", async () => {
     const form = new FormData();
     const image = elements.imageInput.files[0];
     if (image) form.append("image", image);
-    const activeStyle = styleLibrary.find((item) => item.id === elements.stylePresetSelect?.value);
-    const styledPrompt = activeStyle?.preset?.prompt_preset
-      ? `${activeStyle.preset.prompt_preset}\n\n本次课程主题与要求：\n${elements.promptInput.value}`
-      : elements.promptInput.value;
-    form.append("prompt", styledPrompt);
-    form.append("model_profile_id", elements.providerInput.value);
+    form.append("prompt", elements.promptInput.value);
+    form.append("provider", elements.providerInput.value);
     form.append("quality", elements.qualityInput.value);
     form.append("total_duration_seconds", String(totalDurationSeconds));
     form.append("storyboard_scene_count", String(selectedStoryboardSceneCount()));
@@ -1849,7 +1205,7 @@ if (elements.applyEditBtn) {
     elements.editHistory.textContent = editHistory.join("\n");
     try {
       const form = new FormData();
-      form.append("model_profile_id", elements.providerInput.value);
+      form.append("provider", elements.providerInput.value);
       form.append("quality", elements.qualityInput.value);
       form.append("api_key", elements.apiKeyInput.value);
       form.append("base_url", elements.baseUrlInput.value);
@@ -1887,60 +1243,6 @@ if (elements.applyEditBtn) {
   });
 }
 applyDefaultTestSettings();
-initializeConfigurations();
-loadStyleLibrary().catch((error) => appendLog(`风格库读取失败：${error.message}`));
-
-elements.stylePresetSelect?.addEventListener("change", applySelectedStyle);
-elements.applyStylePresetBtn?.addEventListener("click", () => {
-  applySelectedStyle();
-  setMode("quick");
-});
-elements.styleProjectInput?.addEventListener("change", () => {
-  learnStyleFromFiles(elements.styleProjectInput.files)
-    .catch((error) => elements.styleLibraryStatus.textContent = `学习失败：${error.message}`)
-    .finally(() => { elements.styleProjectInput.value = ""; });
-});
-elements.saveStylePresetBtn?.addEventListener("click", () => {
-  saveStylePreset().catch((error) => elements.styleLibraryStatus.textContent = `保存失败：${error.message}`);
-});
-elements.exportStylePresetBtn?.addEventListener("click", () => {
-  const style = styleLibrary.find((item) => item.id === selectedStyleId);
-  if (!style) return;
-  const blob = new Blob([JSON.stringify(style, null, 2)], { type: "application/json" });
-  const anchor = document.createElement("a");
-  anchor.href = URL.createObjectURL(blob);
-  anchor.download = `${style.name || "manim-style"}.json`;
-  anchor.click();
-  URL.revokeObjectURL(anchor.href);
-});
-elements.styleImportInput?.addEventListener("change", async () => {
-  try {
-    const file = elements.styleImportInput.files[0];
-    if (!file) return;
-    const response = await fetch(`${API_BASE}/style-library/import`, {
-      method: "POST", headers: { "Content-Type": "application/json" }, body: await file.text()
-    });
-    const style = await response.json();
-    if (!response.ok) throw new Error(style.detail || "导入失败。");
-    await loadStyleLibrary(style.id);
-  } catch (error) {
-    elements.styleLibraryStatus.textContent = `导入失败：${error.message}`;
-  } finally {
-    elements.styleImportInput.value = "";
-  }
-});
-elements.rollbackStylePresetBtn?.addEventListener("click", async () => {
-  if (!selectedStyleId || !elements.styleVersionSelect.value) return;
-  try {
-    const response = await fetch(`${API_BASE}/style-library/${selectedStyleId}/rollback/${elements.styleVersionSelect.value}`, { method: "POST" });
-    const style = await response.json();
-    if (!response.ok) throw new Error(style.detail || "回退失败。");
-    await loadStyleLibrary(style.id);
-    elements.styleLibraryStatus.textContent = `已回退到版本 ${style.active_version}。`;
-  } catch (error) {
-    elements.styleLibraryStatus.textContent = `回退失败：${error.message}`;
-  }
-});
 
 async function initializeWorkflowEditor() {
   try {
@@ -1955,8 +1257,6 @@ async function initializeWorkflowEditor() {
 }
 
 function renderNodeLibrary(definitions) {
-  const imageNodeTypes = new Set(["InputImageNode", "ImagePreprocessNode", "ImageUnderstandNode"]);
-  const visionReady = hasModelCapability("vision") && hasModelCapability("image_upload") && hasModelCapability("multimodal_input");
   const groups = {};
   definitions.forEach((definition) => {
     groups[definition.category] = groups[definition.category] || [];
@@ -1965,7 +1265,7 @@ function renderNodeLibrary(definitions) {
   elements.nodeLibrary.innerHTML = Object.entries(groups).map(([category, items]) => `
     <div class="library-group">
       <div class="library-group-title">${categoryLabels[category] || category}</div>
-      ${items.map((item) => `<button class="library-node" data-node-type="${item.type}" ${imageNodeTypes.has(item.type) && !visionReady ? "disabled title=\"当前模型不支持 Vision\"" : ""}>${labelForNode(item)}</button>`).join("")}
+      ${items.map((item) => `<button class="library-node" data-node-type="${item.type}">${labelForNode(item)}</button>`).join("")}
     </div>
   `).join("");
   elements.nodeLibrary.querySelectorAll(".library-node").forEach((button) => {
@@ -2160,21 +1460,6 @@ function renderInspector() {
     input.addEventListener("input", () => {
       const active = workflow.nodes.find((item) => item.id === selectedNodeId);
       active.params[input.dataset.paramKey] = input.value;
-      active.status = "idle";
-      const affected = new Set([active.id]);
-      let changed = true;
-      while (changed) {
-        changed = false;
-        workflow.edges.forEach((edge) => {
-          if (affected.has(edge.source) && !affected.has(edge.target)) {
-            affected.add(edge.target);
-            changed = true;
-          }
-        });
-      }
-      workflow.nodes.forEach((item) => {
-        if (affected.has(item.id)) item.status = "idle";
-      });
     });
   });
   elements.nodeInspector.querySelector("#deleteSelectedNodeBtn").addEventListener("click", deleteSelectedNode);
@@ -2225,7 +1510,9 @@ async function runWorkflow() {
     const valid = await validateWorkflow();
     if (!valid) return;
     const url = new URL(`${API_BASE}/workflow/run_async`);
-    url.searchParams.set("model_profile_id", elements.providerInput.value);
+    url.searchParams.set("provider", elements.providerInput.value || "deepseek");
+    url.searchParams.set("base_url", elements.baseUrlInput.value || "https://api.deepseek.com/v1");
+    url.searchParams.set("model", elements.modelInput.value || "deepseek-v4-pro");
     url.searchParams.set("quality", elements.qualityInput.value || "low");
     url.searchParams.set("output_dir", selectedOutputDir);
     const response = await fetch(url, {
@@ -2250,7 +1537,6 @@ async function pollWorkflowTask(taskId) {
     const response = await fetch(`${API_BASE}/tasks/${taskId}`);
     const task = await response.json();
     if (!response.ok) throw new Error(task.detail || "任务轮询失败。");
-    updateTaskProgress(task, true);
     const logs = (task.logs || []).join("\n");
     if (logs !== last) {
       last = logs;
@@ -2258,16 +1544,11 @@ async function pollWorkflowTask(taskId) {
       elements.workflowLog.scrollTop = elements.workflowLog.scrollHeight;
     }
     if (task.state === "succeeded") {
-      const states = task.result?.workflow_node_states || {};
-      workflow.nodes.forEach((node) => {
-        if (states[node.id]?.status) node.status = states[node.id].status;
-      });
-      renderWorkflow();
       applyResult(task.result);
       appendWorkflowLog("工作流运行完成。");
       return;
     }
-    if (["failed", "stalled", "interrupted"].includes(task.state)) throw new Error(task.error || "工作流失败。");
+    if (task.state === "failed") throw new Error(task.error || "工作流失败。");
     await new Promise((resolve) => setTimeout(resolve, 1500));
   }
 }
@@ -2283,13 +1564,7 @@ function saveWorkflowJson() {
 }
 
 elements.loadMathTemplateBtn.addEventListener("click", () => loadWorkflowTemplate("math_function"));
-elements.loadImageTemplateBtn.addEventListener("click", () => {
-  if (!(hasModelCapability("vision") && hasModelCapability("image_upload") && hasModelCapability("multimodal_input"))) {
-    appendWorkflowLog("当前所选模型不支持图片理解（Vision）能力，请切换至支持读图的模型后再使用该功能。");
-    return;
-  }
-  loadWorkflowTemplate("image_problem");
-});
+elements.loadImageTemplateBtn.addEventListener("click", () => loadWorkflowTemplate("image_problem"));
 elements.loadMechanicsTemplateBtn.addEventListener("click", () => loadWorkflowTemplate("mechanics_beam"));
 elements.validateWorkflowBtn.addEventListener("click", validateWorkflow);
 elements.runWorkflowBtn.addEventListener("click", runWorkflow);
@@ -2310,30 +1585,6 @@ elements.loadWorkflowInput.addEventListener("change", async () => {
   selectedNodeId = null;
   appendWorkflowLog(`已加载工作流文件：${file.name}`);
   renderWorkflow();
-});
-
-elements.customNodeInput?.addEventListener("change", async () => {
-  const file = elements.customNodeInput.files[0];
-  if (!file) return;
-  const form = new FormData();
-  form.append("file", file);
-  try {
-    const response = await fetch(`${API_BASE}/workflow/custom-nodes`, { method: "POST", body: form });
-    const payload = await response.json();
-    if (!response.ok) throw new Error(payload.detail || "自定义节点上传失败。");
-    nodeDefinitions[payload.node.type] = payload.node;
-    renderNodeLibrary(Object.values(nodeDefinitions));
-    appendWorkflowLog(`自定义节点“${payload.node.label}”已加入节点库。`);
-  } catch (error) {
-    appendWorkflowLog(`自定义节点上传失败：${error.message}`);
-  } finally {
-    elements.customNodeInput.value = "";
-  }
-});
-
-elements.workflowTutorialBtn?.addEventListener("click", () => {
-  appendWorkflowLog("节点工作流教程：WORKFLOW_TUTORIAL.md。基础流程：输入节点 → 规划/控制节点 → Manim 代码 → 渲染 → 输出。");
-  elements.workflowLog?.scrollIntoView({ behavior: "smooth", block: "center" });
 });
 
 initializeWorkflowEditor();

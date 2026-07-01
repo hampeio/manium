@@ -11,7 +11,7 @@ class ProjectManager:
     """Creates isolated project folders and writes task artifacts."""
 
     def __init__(self, root: Path):
-        self.root = root.expanduser().resolve()
+        self.root = root
         self.root.mkdir(parents=True, exist_ok=True)
 
     def create_project(self) -> Path:

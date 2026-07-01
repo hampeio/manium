@@ -5,9 +5,6 @@ def sanitize_manim_code(code: str) -> str:
     """Remove Manim patterns that commonly require LaTeX on bare Windows installs."""
 
     sanitized = code
-    # This internal fallback instruction must never become visible, even when
-    # stale model output or an old cached response reaches this layer.
-    sanitized = sanitized.replace("分镜驱动生成：每一段都按 visual_plan 重新构图", " ")
     sanitized = re.sub(
         r"\n\s*summary\s*=\s*VGroup\(cn\(\"\\u5206\\u955c\\u6f14\\u793a\\u5b8c\\u6210\".*?"
         r"\n\s*self\.wait\(3\)",

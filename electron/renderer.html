@@ -16,8 +16,6 @@
         <div class="top-actions">
           <button id="quickModeTab" class="mode-tab active">快速生成</button>
           <button id="workflowModeTab" class="mode-tab">节点工作流</button>
-          <button id="styleModeTab" class="mode-tab">风格库</button>
-          <button id="settingsBtn" class="secondary">模型与音频设置</button>
           <button id="generateBtn" class="primary">生成</button>
         </div>
       </header>
@@ -25,11 +23,10 @@
       <main id="quickView" class="workspace">
         <section class="panel inputs">
           <div class="panel-title">输入</div>
-          <label id="imageUploadBox" class="upload-box">
+          <label class="upload-box">
             <input id="imageInput" type="file" accept="image/png,image/jpeg,image/webp,image/bmp" />
             <span id="imageName">选择图片</span>
           </label>
-          <div id="visionCapabilityHint" class="path-line">正在读取模型能力...</div>
 
           <label>
             提示词
@@ -40,7 +37,9 @@
             <label>
               服务商
               <select id="providerInput">
-                <option value="">正在读取模型配置...</option>
+                <option value="mock">本地 Mock</option>
+                <option value="openai">OpenAI / GPT</option>
+                <option value="deepseek" selected>DeepSeek</option>
               </select>
             </label>
             <label>
@@ -81,17 +80,16 @@
 
           <label>
             API Key
-            <input id="apiKeyInput" type="password" placeholder="请在模型设置中维护" readonly />
+            <input id="apiKeyInput" type="password" placeholder="可选，默认优先读取本地 .env。" />
           </label>
           <label>
             Base URL
-            <input id="baseUrlInput" placeholder="请在模型设置中维护" readonly />
+            <input id="baseUrlInput" value="https://api.deepseek.com/v1" placeholder="https://api.deepseek.com/v1" />
           </label>
           <label>
             模型名称
-            <input id="modelInput" placeholder="请在模型设置中维护" readonly />
+            <input id="modelInput" value="deepseek-v4-pro" placeholder="deepseek-v4-pro" />
           </label>
-          <div id="modelCapabilitySummary" class="capability-summary"></div>
 
           <label class="check-row">
             <input id="compactTimingInput" type="checkbox" checked />
@@ -156,15 +154,6 @@
             <span id="projectPath">项目：尚未生成</span>
           </div>
           <div id="composeStatus" class="status-line">总体视频仅在点击“合成总体视频”后生成。</div>
-          <section id="taskProgressPanel" class="task-progress-panel">
-            <div class="task-progress-header">
-              <strong id="taskStateLabel">当前状态：未开始</strong>
-              <span id="taskProgressText">0%</span>
-            </div>
-            <progress id="taskProgressBar" max="100" value="0"></progress>
-            <div id="taskCurrentStep" class="status-line">等待生成任务。</div>
-            <div id="taskRemainingSteps" class="path-line">剩余阶段：分析提示词、生成分镜、生成片段、渲染视频、生成音频</div>
-          </section>
           <section id="rootFolderPanel" class="root-folder-panel hidden">
             <div class="root-folder-header">
               <strong>根文件夹成品</strong>
@@ -210,39 +199,6 @@
             </div>
           </div>
           <div class="edit-panel">
-            <section class="segment-code-editor">
-              <div class="panel-title">当前分镜 Manim 代码</div>
-              <div id="segmentCodeLabel" class="status-line">请先选择一个分镜片段。</div>
-              <textarea id="segmentCodeInput" class="segment-code-input" spellcheck="false" placeholder="选中分镜后自动加载该片段当前代码。"></textarea>
-              <div class="segment-code-toolbar">
-                <button id="copySegmentCodeBtn" class="secondary" disabled>复制代码</button>
-                <label class="file-button secondary">
-                  上传 .py
-                  <input id="uploadSegmentCodeInput" type="file" accept=".py,text/x-python" />
-                </label>
-                <button id="renderSegmentCodeBtn" class="primary" disabled>保存并重渲染当前片段</button>
-              </div>
-              <div class="grid two segment-timing-controls">
-                <label>
-                  音画时长策略
-                  <select id="segmentTimingPolicy">
-                    <option value="auto_audio" selected>自动适配音频长度</option>
-                    <option value="keep_video">保持 Manim 原始时长</option>
-                    <option value="manual">手动设置片段时长</option>
-                  </select>
-                </label>
-                <label>
-                  手动时长（秒）
-                  <input id="segmentManualDuration" type="number" min="0.1" step="0.1" disabled />
-                </label>
-              </div>
-              <div id="segmentSyncStatus" class="status-line">视频时长：-- · 音频时长：-- · 对齐状态：--</div>
-              <div class="segment-code-history">
-                <select id="segmentCodeHistory"><option value="">历史版本</option></select>
-                <button id="restoreSegmentCodeBtn" class="secondary" disabled>载入所选历史版本</button>
-              </div>
-              <div id="segmentCodeStatus" class="path-line">修改只影响当前选中的分镜。</div>
-            </section>
             <div class="panel-title">生成后修改</div>
             <textarea id="editPromptInput" placeholder="例如：减少分镜之间的等待时间，让画面持续变化；删除空白停顿；把弹幕演示放大。"></textarea>
             <div class="edit-actions">
@@ -266,11 +222,6 @@
             加载 JSON
             <input id="loadWorkflowInput" type="file" accept="application/json" />
           </label>
-          <label class="file-button secondary">
-            上传自定义节点
-            <input id="customNodeInput" type="file" accept="application/json" />
-          </label>
-          <button id="workflowTutorialBtn" class="secondary">使用教程</button>
           <button id="fitWorkflowBtn" class="secondary">适配视图</button>
         </section>
 
@@ -295,14 +246,6 @@
 
             <section class="panel workflow-result">
               <div class="panel-title">生成结果</div>
-              <section class="task-progress-panel compact">
-                <div class="task-progress-header">
-                  <strong id="workflowTaskStateLabel">当前状态：未开始</strong>
-                  <span id="workflowTaskProgressText">0%</span>
-                </div>
-                <progress id="workflowTaskProgressBar" max="100" value="0"></progress>
-                <div id="workflowTaskCurrentStep" class="path-line">等待运行工作流。</div>
-              </section>
               <video id="workflowVideoPlayer" controls></video>
               <div class="player-actions">
                 <button id="workflowReplayBtn" class="secondary">重播</button>
@@ -325,84 +268,6 @@
           <pre id="workflowLog"></pre>
         </section>
       </main>
-    </div>
-
-    <div id="settingsModal" class="modal hidden">
-      <div class="modal-card settings-modal-card">
-        <div class="modal-header">
-          <div>
-            <div class="panel-title">模型与音频配置</div>
-            <p>功能入口由当前配置的 capabilities 自动启用；探测失败时可手动修正。</p>
-          </div>
-          <button id="closeSettingsBtn" class="secondary">关闭</button>
-        </div>
-        <div class="settings-grid">
-          <section class="settings-section">
-            <div class="settings-section-title">模型配置</div>
-            <select id="modelProfileList" size="6"></select>
-            <div class="grid two">
-              <label>配置名称<input id="modelProfileName" /></label>
-              <label>Provider 名称<input id="modelProviderName" placeholder="任意兼容服务商" /></label>
-              <label>API Base URL<input id="modelBaseUrl" placeholder="https://example.com/v1" /></label>
-              <label>API Key<input id="modelApiKey" type="password" placeholder="留空则保留原值" /></label>
-              <label>Model Name<input id="modelNameSetting" /></label>
-              <label>最大 Token 数<input id="modelMaxTokens" type="number" min="1" value="8192" /></label>
-              <label>Temperature<input id="modelTemperature" type="number" min="0" max="2" step="0.05" value="0.25" /></label>
-              <label>Top P<input id="modelTopP" type="number" min="0" max="1" step="0.05" value="1" /></label>
-            </div>
-            <div class="capability-checks">
-              <label><input type="checkbox" data-model-capability="text_generation" />文本生成</label>
-              <label><input type="checkbox" data-model-capability="vision" />Vision</label>
-              <label><input type="checkbox" data-model-capability="image_upload" />图片上传</label>
-              <label><input type="checkbox" data-model-capability="multimodal_input" />多模态输入</label>
-              <label><input type="checkbox" data-model-capability="image_annotation" />图片批注</label>
-              <label><input type="checkbox" data-model-capability="function_calling" />Function Calling</label>
-              <label><input type="checkbox" data-model-capability="json_output" />JSON 输出</label>
-              <label><input type="checkbox" data-model-capability="streaming" />Streaming</label>
-              <label><input type="checkbox" data-model-capability="audio" />音频</label>
-            </div>
-            <div class="settings-actions">
-              <button id="newModelProfileBtn" class="secondary">新增</button>
-              <button id="saveModelProfileBtn" class="primary">保存</button>
-              <button id="deleteModelProfileBtn" class="secondary">删除</button>
-              <button id="defaultModelProfileBtn" class="secondary">设为默认</button>
-              <button id="probeModelProfileBtn" class="secondary">自动探测能力</button>
-            </div>
-            <div id="modelSettingsStatus" class="status-line">等待操作。</div>
-          </section>
-
-          <section class="settings-section">
-            <div class="settings-section-title">音频 API 配置</div>
-            <select id="audioProfileList" size="6"></select>
-            <div class="grid two">
-              <label>配置名称<input id="audioProfileName" /></label>
-              <label>Provider 名称<input id="audioProviderName" /></label>
-              <label>API URL<input id="audioBaseUrl" placeholder="完整生成接口 URL" /></label>
-              <label>API Key<input id="audioApiKey" type="password" placeholder="留空则保留原值" /></label>
-              <label>音频模型名称<input id="audioModelName" /></label>
-              <label>响应模式<select id="audioResponseMode"><option value="binary">二进制音频</option><option value="json_base64">JSON Base64</option><option value="json_url">JSON URL</option></select></label>
-              <label>文本字段<input id="audioTextField" value="text" /></label>
-              <label>模型字段<input id="audioModelField" value="model" /></label>
-            </div>
-            <label>请求 Header（JSON）<textarea id="audioHeaders">{}</textarea></label>
-            <label>请求参数（JSON）<textarea id="audioParameters">{}</textarea></label>
-            <label>响应音频字段<input id="audioResponseField" value="audio" /></label>
-            <div class="settings-actions">
-              <button id="newAudioProfileBtn" class="secondary">新增</button>
-              <button id="saveAudioProfileBtn" class="primary">保存</button>
-              <button id="deleteAudioProfileBtn" class="secondary">删除</button>
-              <button id="defaultAudioProfileBtn" class="secondary">设为默认</button>
-              <button id="testAudioProfileBtn" class="secondary">一键测试接口</button>
-            </div>
-            <div id="audioSettingsStatus" class="status-line">未配置时自动跳过旁白，不中断视频生成。</div>
-          </section>
-        </div>
-        <div class="settings-actions config-transfer-actions">
-          <label class="check-row"><input id="exportSecretsInput" type="checkbox" />导出时包含 API Key（请妥善保管文件）</label>
-          <button id="exportConfigsBtn" class="secondary">导出配置</button>
-          <label class="secondary file-button">导入配置<input id="importConfigsInput" type="file" accept="application/json" /></label>
-        </div>
-      </div>
     </div>
 
     <div id="promptModal" class="modal hidden">
@@ -431,50 +296,6 @@
         </div>
       </div>
     </div>
-    <main id="styleView" class="style-view hidden">
-      <section class="panel style-library-page">
-        <div class="modal-header">
-          <div>
-            <div class="panel-title">Style Library · Manim 工作流预设生成器</div>
-            <p>导入 Manim 源码及可选的分镜、关键帧、视频、音频或字幕，自动学习并沉淀可复用风格。</p>
-          </div>
-        </div>
-        <div class="style-library-layout">
-          <aside>
-            <label>
-              快速生成使用
-              <select id="stylePresetSelect"><option value="">不使用风格预设</option></select>
-            </label>
-            <div id="styleLibraryList" class="prompt-name-list"></div>
-            <label class="secondary file-button full-width">导入预设 JSON<input id="styleImportInput" type="file" accept="application/json" /></label>
-          </aside>
-          <section class="style-library-editor">
-            <div class="grid two">
-              <label>风格名称<input id="styleNameInput" placeholder="例如：数学推导风格" /></label>
-              <label>历史版本<select id="styleVersionSelect"><option value="">尚无版本</option></select></label>
-            </div>
-            <label>风格描述<textarea id="styleDescriptionInput"></textarea></label>
-            <label>Prompt Preset<textarea id="stylePromptInput" class="prompt-template-input"></textarea></label>
-            <div class="grid two">
-              <label>Scene 数量<input id="styleSceneCountInput" type="number" min="1" max="100" /></label>
-              <label>动画速度<input id="styleSpeedInput" placeholder="快速 / 中等 / 舒缓" /></label>
-            </div>
-            <details>
-              <summary>分析报告与示例代码</summary>
-              <pre id="styleAnalysisView"></pre>
-            </details>
-            <div class="settings-actions">
-              <label class="primary file-button">学习 Manim 工程<input id="styleProjectInput" type="file" multiple accept=".py,.json,.srt,.vtt,.md,.txt,.cfg,.png,.jpg,.jpeg,.webp,.bmp,.mp4,.mov,.webm,.mp3,.wav,.m4a" /></label>
-              <button id="saveStylePresetBtn" class="primary">另存新版本</button>
-              <button id="applyStylePresetBtn" class="secondary">用于快速生成</button>
-              <button id="exportStylePresetBtn" class="secondary">导出</button>
-              <button id="rollbackStylePresetBtn" class="secondary">回退到此版本</button>
-            </div>
-            <div id="styleLibraryStatus" class="status-line">请选择已有风格，或输入名称后导入工程。</div>
-          </section>
-        </div>
-      </section>
-    </main>
     <script src="./annotation-editor.js"></script>
     <script src="./renderer.js"></script>
   </body>

@@ -10,35 +10,29 @@ def validate_workflow(workflow: WorkflowGraph) -> WorkflowValidationResult:
     node_id_set = set(node_ids)
 
     if len(node_ids) != len(node_id_set):
-        issues.append(ValidationIssue(severity="error", message="存在重复的节点 ID。"))
+        issues.append(ValidationIssue(severity="error", message="Duplicate node id found."))
 
     node_by_id = {node.id: node for node in workflow.nodes}
     for node in workflow.nodes:
         definition = get_node_definition(node.type)
         if not definition:
-            issues.append(ValidationIssue(severity="error", node_id=node.id, message=f"未知节点类型：{node.type}"))
+            issues.append(ValidationIssue(severity="error", node_id=node.id, message=f"Unknown node type: {node.type}"))
 
-    if not any(node.type in {"PromptInputNode", "InputImageNode", "VideoInputNode"} for node in workflow.nodes):
-        issues.append(ValidationIssue(severity="error", message="工作流至少需要一个文本、图片或视频输入节点。"))
+    if not any(node.type in {"PromptInputNode", "InputImageNode"} for node in workflow.nodes):
+        issues.append(ValidationIssue(severity="error", message="Workflow needs at least one prompt or image input node."))
     if not any(node.type == "OutputNode" for node in workflow.nodes):
-        issues.append(ValidationIssue(severity="error", message="工作流需要一个输出节点。"))
+        issues.append(ValidationIssue(severity="error", message="Workflow needs an OutputNode."))
 
     outgoing: dict[str, list[str]] = defaultdict(list)
     incoming: dict[str, list[str]] = defaultdict(list)
     connected_targets = {(edge.target, edge.targetHandle) for edge in workflow.edges}
-    edge_ids: set[str] = set()
 
     for edge in workflow.edges:
-        if edge.id in edge_ids:
-            issues.append(ValidationIssue(severity="error", edge_id=edge.id, message="存在重复的连线 ID。"))
-        edge_ids.add(edge.id)
-        if edge.source == edge.target:
-            issues.append(ValidationIssue(severity="error", edge_id=edge.id, message="节点不能连接到自身。"))
         if edge.source not in node_id_set:
-            issues.append(ValidationIssue(severity="error", edge_id=edge.id, message=f"连线源节点不存在：{edge.source}"))
+            issues.append(ValidationIssue(severity="error", edge_id=edge.id, message=f"Invalid source node: {edge.source}"))
             continue
         if edge.target not in node_id_set:
-            issues.append(ValidationIssue(severity="error", edge_id=edge.id, message=f"连线目标节点不存在：{edge.target}"))
+            issues.append(ValidationIssue(severity="error", edge_id=edge.id, message=f"Invalid target node: {edge.target}"))
             continue
         outgoing[edge.source].append(edge.target)
         incoming[edge.target].append(edge.source)
@@ -50,11 +44,11 @@ def validate_workflow(workflow: WorkflowGraph) -> WorkflowValidationResult:
             continue
         for port in definition.inputs:
             if port.required and (node.id, port.name) not in connected_targets and port.default is None:
-                issues.append(ValidationIssue(severity="error", node_id=node.id, message=f"必填输入未连接：{port.name}"))
+                issues.append(ValidationIssue(severity="error", node_id=node.id, message=f"Required input not connected: {port.name}"))
 
     order, cycle_found = _topological_order(node_ids, outgoing, incoming)
     if cycle_found:
-        issues.append(ValidationIssue(severity="error", message="工作流存在循环连接，无法确定执行顺序。"))
+        issues.append(ValidationIssue(severity="error", message="Workflow must be a DAG; cycle detected."))
 
     return WorkflowValidationResult(valid=not any(issue.severity == "error" for issue in issues), issues=issues, execution_order=order)
 
