@@ -39,7 +39,26 @@ def test_legacy_english_prompt_override_is_ignored(tmp_path: Path, monkeypatch):
     loaded = prompt_store.load_prompt_overrides(override)
 
     assert loaded == {}
-    assert prompt_store.prompts.SYSTEM_PROMPT == "中文系统提示词"
+    assert prompt_store.prompts.SYSTEM_PROMPT.startswith("中文系统提示词")
+    assert "视觉与事实正确性硬性规则：" in prompt_store.prompts.SYSTEM_PROMPT
+    monkeypatch.setattr(prompt_store.prompts, "SYSTEM_PROMPT", original)
+
+
+def test_system_prompt_always_includes_general_visual_correctness_rules(tmp_path: Path, monkeypatch):
+    override = tmp_path / "prompt_overrides.json"
+    override.write_text(
+        '{"prompts":{"SYSTEM_PROMPT":"自定义中文系统提示词"}}',
+        encoding="utf-8",
+    )
+    original = prompt_store.prompts.SYSTEM_PROMPT
+    monkeypatch.setattr(prompt_store.prompts, "SYSTEM_PROMPT", "默认中文系统提示词")
+
+    prompt_store.load_prompt_overrides(override)
+
+    active = prompt_store.get_prompt_values()["SYSTEM_PROMPT"]
+    assert active.startswith("自定义中文系统提示词")
+    assert "视觉与事实正确性硬性规则：" in active
+    assert "共享同一份几何或数据来源" in active
     monkeypatch.setattr(prompt_store.prompts, "SYSTEM_PROMPT", original)
 
 

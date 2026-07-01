@@ -15,8 +15,8 @@ class Settings(BaseSettings):
     host: str = "127.0.0.1"
     port: int = 8765
     generated_projects_dir: Path = Field(default=Path("generated_projects"))
-
-    default_provider: Literal["openai", "deepseek", "mock"] = "mock"
+    configuration_dir: Path = Field(default=Path("config"))
+    default_provider: Literal["openai", "deepseek", "mock"] = "deepseek"
     openai_api_key: str | None = None
     openai_base_url: str = "https://api.openai.com/v1"
     openai_model: str = "gpt-4.1-mini"
@@ -41,7 +41,6 @@ class Settings(BaseSettings):
 
     manim_scene_name: str = "GeneratedTeachingScene"
     manim_command: str = "python -m manim"
-    max_repair_rounds: int = 3
 
 
 @lru_cache

@@ -4,12 +4,20 @@ const fs = require("fs");
 const { spawn } = require("child_process");
 
 let backendProcess = null;
+const root = path.resolve(__dirname, "..");
+const backendPort = /^\d+$/.test(process.env.MANIM_PORTABLE_PORT || "")
+  ? process.env.MANIM_PORTABLE_PORT
+  : "8765";
+const backendBase = `http://127.0.0.1:${backendPort}`;
 
 app.setName("Manim 教学动画生成器");
+if (process.env.MANIM_PORTABLE_ROOT) {
+  app.setPath("userData", path.join(process.env.MANIM_PORTABLE_ROOT, "portable_userdata"));
+}
 
 async function isBackendReady() {
   try {
-    const response = await fetch("http://127.0.0.1:8765/health");
+    const response = await fetch(`${backendBase}/health`);
     return response.ok;
   } catch (_error) {
     return false;
@@ -30,10 +38,9 @@ async function startBackend() {
     return;
   }
 
-  const root = path.resolve(__dirname, "..");
   const bundledPython = path.join(root, ".venv", "Scripts", "python.exe");
   const pythonExe = process.env.MANIM_APP_PYTHON || (fs.existsSync(bundledPython) ? bundledPython : "python");
-  backendProcess = spawn(pythonExe, ["-m", "uvicorn", "backend.main:app", "--host", "127.0.0.1", "--port", "8765"], {
+  backendProcess = spawn(pythonExe, ["-m", "uvicorn", "backend.main:app", "--host", "127.0.0.1", "--port", backendPort], {
     cwd: root,
     shell: false,
     windowsHide: true,

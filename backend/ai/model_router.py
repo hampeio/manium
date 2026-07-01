@@ -1,5 +1,6 @@
-import base64
+﻿import base64
 import asyncio
+import ast
 import json
 import logging
 import re
@@ -32,7 +33,19 @@ from backend.ai.schemas import (
 
 logger = logging.getLogger(__name__)
 
+VISION_REQUIRED_MESSAGE = "当前所选模型不支持图片理解（Vision）能力，请切换至支持读图的模型后再使用该功能。"
+
+
+class ModelCapabilityError(ValueError):
+    """Raised before a request enters a feature unsupported by the selected model."""
+
+
+class ModelProviderUnavailableError(RuntimeError):
+    """Provider cannot serve this task and should be bypassed for later calls."""
+
+
 RECOVERABLE_MODEL_ERRORS = (
+    ModelProviderUnavailableError,
     httpx.RemoteProtocolError,
     httpx.ReadError,
     httpx.TimeoutException,
@@ -52,6 +65,11 @@ class ModelRouter:
         self.config = config
         self.trace_dir = trace_dir
         self._trace_index = 0
+        self._provider_disabled_reason = ""
+
+    @property
+    def provider_disabled_reason(self) -> str:
+        return self._provider_disabled_reason
 
     async def plan_generation_strategy(
         self,
@@ -63,7 +81,7 @@ class ModelRouter:
     ) -> GenerationStrategy:
         """First AI call: produce the outline, duration allocation, and follow-up call count."""
 
-        if self.config.provider == "mock" or not self.config.api_key:
+        if self.config.provider == "mock":
             return self._mock_strategy(user_prompt, image_context, priority_rule, total_duration_seconds)
 
         prompt = GENERATION_STRATEGY_PROMPT.format(
@@ -94,7 +112,7 @@ class ModelRouter:
     ) -> StoryboardBatchResult:
         """Follow-up AI call: expand one outline batch into fine-grained storyboard shots."""
 
-        if self.config.provider == "mock" or not self.config.api_key:
+        if self.config.provider == "mock":
             return self._mock_storyboard_batch(strategy, batch, start_index)
 
         prompt = STORYBOARD_BATCH_PROMPT.format(
@@ -157,7 +175,7 @@ class ModelRouter:
     async def generate_code_from_plan(self, plan: TeachingPlan, total_duration_seconds: int) -> str:
         """Final AI call: generate Manim code from the fully expanded storyboard."""
 
-        if self.config.provider == "mock" or not self.config.api_key:
+        if self.config.provider == "mock":
             return self._code_from_storyboard(plan, total_duration_seconds)
 
         prompt = CODE_FROM_PLAN_PROMPT.format(
@@ -168,7 +186,7 @@ class ModelRouter:
         )
         try:
             data = await self._chat_json("code_from_full_plan", prompt, None, max_tokens=8192)
-            parsed = CodeGenerationResult.model_validate_json(data["choices"][0]["message"]["content"])
+            parsed = self._parse_code_generation_result(data)
             self._write_trace_parsed(data["_trace_id"], "code_from_full_plan", parsed.model_dump())
             return parsed.manim_code
         except RECOVERABLE_MODEL_ERRORS as exc:
@@ -186,10 +204,11 @@ class ModelRouter:
         segment_index: int,
         segment_count: int,
         segment_duration_seconds: int,
+        image_path: Path | None = None,
     ) -> str:
         """Generate one independently renderable Manim scene for a course segment."""
 
-        if self.config.provider == "mock" or not self.config.api_key:
+        if self.config.provider == "mock":
             return self._code_from_storyboard(plan, segment_duration_seconds)
 
         prompt = SEGMENT_CODE_PROMPT.format(
@@ -201,8 +220,8 @@ class ModelRouter:
             code_plan=plan.code_plan,
         )
         try:
-            data = await self._chat_json(f"segment_{segment_index:02d}_code", prompt, None, max_tokens=8192)
-            parsed = CodeGenerationResult.model_validate_json(data["choices"][0]["message"]["content"])
+            data = await self._chat_json(f"segment_{segment_index:02d}_code", prompt, image_path, max_tokens=8192)
+            parsed = self._parse_code_generation_result(data)
             self._write_trace_parsed(data["_trace_id"], f"segment_{segment_index:02d}_code", parsed.model_dump())
             return parsed.manim_code
         except RECOVERABLE_MODEL_ERRORS as exc:
@@ -213,6 +232,33 @@ class ModelRouter:
             )
             return self._code_from_storyboard(plan, segment_duration_seconds)
 
+    def _parse_code_generation_result(self, data: dict[str, Any]) -> CodeGenerationResult:
+        """Recover a complete fenced Manim program when JSON output was truncated."""
+
+        message = data["choices"][0]["message"]
+        content = str(message.get("content") or "")
+        try:
+            return CodeGenerationResult.model_validate_json(content)
+        except ValidationError as original_error:
+            candidates: list[str] = []
+            for source in (content, str(message.get("reasoning_content") or "")):
+                candidates.extend(re.findall(r"```(?:python)?\s*(.*?)```", source, flags=re.IGNORECASE | re.DOTALL))
+                if "from manim import" in source:
+                    candidates.append(source[source.rfind("from manim import") :])
+            valid: list[str] = []
+            for candidate in candidates:
+                code = candidate.strip()
+                if "class GeneratedTeachingScene" not in code or "def construct" not in code:
+                    continue
+                try:
+                    ast.parse(code)
+                except SyntaxError:
+                    continue
+                valid.append(code)
+            if valid:
+                return CodeGenerationResult(manim_code=max(valid, key=len))
+            raise original_error
+
     async def generate_animation(
         self,
         user_prompt: str,
@@ -221,7 +267,7 @@ class ModelRouter:
         priority_rule: str,
         total_duration_seconds: int = 300,
     ) -> GeneratedAnimation:
-        if self.config.provider == "mock" or not self.config.api_key:
+        if self.config.provider == "mock":
             return self._mock_animation(user_prompt, image_context, priority_rule, total_duration_seconds)
 
         prompt = PLAN_AND_CODE_PROMPT.format(
@@ -236,9 +282,8 @@ class ModelRouter:
                 {"role": "system", "content": SYSTEM_PROMPT},
                 {"role": "user", "content": self._build_user_content(prompt, image_path)},
             ],
-            "temperature": 0.25,
-            "response_format": {"type": "json_object"},
         }
+        self._apply_request_options(payload, temperature=0.25)
         trace_id = self._write_trace_request("generate", payload)
         data = await self._post_chat(payload)
         self._write_trace_response(trace_id, "generate", data)
@@ -254,31 +299,70 @@ class ModelRouter:
                 {"role": "system", "content": SYSTEM_PROMPT},
                 {"role": "user", "content": self._build_user_content(prompt, image_path)},
             ],
-            "temperature": 0.25,
-            "response_format": {"type": "json_object"},
-            "stream": False,
         }
+        self._apply_request_options(payload, temperature=0.25)
         if max_tokens:
-            payload["max_tokens"] = max_tokens
+            payload["max_tokens"] = min(max_tokens, self.config.parameters.max_tokens)
         trace_id = self._write_trace_request(step, payload)
         data = await self._post_chat(payload)
         self._write_trace_response(trace_id, step, data)
         data["_trace_id"] = trace_id
         return data
 
+    async def analyze_manim_style(self, evidence: dict[str, Any], image_path: Path | None = None) -> dict[str, Any]:
+        """Use the configured model to turn measured Manim evidence into a reusable style preset."""
+
+        if self.config.provider == "mock":
+            raise RuntimeError("当前默认模型是本地 Mock，无法执行 AI 风格学习。")
+        prompt = f"""
+你是 Manim 工程风格分析器。根据下面的静态分析证据与可选参考帧，生成可复用的工作流风格预设。
+
+要求：
+1. 只依据证据归纳，区分“可测事实”和“模型推断”，不要虚构未提供的字体、镜头或音频特征。
+2. 分析代码组织、Scene 职责、对象/动画顺序、VGroup/布局、Transform、Camera、自定义函数。
+3. 总结视觉风格、背景、字体、字号、配色、强调色、排版、留白、元素密度和动画速度。
+4. 总结教学节奏：知识点时长、Reveal/Transform 规律、先讲后画或边讲边画。
+5. prompt_preset 必须是可直接约束后续 Manim 代码生成的中文操作指令。
+6. 输出严格 JSON，不要 Markdown。
+
+JSON 结构：
+{{
+  "style_name": "名称",
+  "style_description": "描述",
+  "visual_style": {{}},
+  "teaching_rhythm": {{}},
+  "code_patterns": {{}},
+  "prompt_preset": "完整提示词",
+  "recommended_scene_count": 8,
+  "animation_speed": "快速|中等|舒缓",
+  "palette": [],
+  "fonts": [],
+  "confidence": 0.0,
+  "inference_notes": []
+}}
+
+工程证据：
+{json.dumps(evidence, ensure_ascii=False, indent=2)[:30000]}
+"""
+        data = await self._chat_json("manim_style_analysis", prompt, image_path, max_tokens=8192)
+        content = data["choices"][0]["message"]["content"]
+        result = json.loads(content)
+        if not isinstance(result, dict) or not str(result.get("prompt_preset", "")).strip():
+            raise ValueError("模型未返回有效的 prompt_preset。")
+        return result
+
     async def repair_code(self, teaching_goal: str, code: str, error_log: str) -> RepairResult:
-        if self.config.provider == "mock" or not self.config.api_key:
+        if self.config.provider == "mock":
             return RepairResult(repaired_code=self._fallback_code(teaching_goal, 300), notes="Local mock repair generated a conservative runnable scene.")
 
-        payload = {
+        payload: dict[str, Any] = {
             "model": self.config.model,
             "messages": [
                 {"role": "system", "content": SYSTEM_PROMPT},
                 {"role": "user", "content": REPAIR_PROMPT.format(teaching_goal=teaching_goal, code=code, error_log=error_log[-6000:])},
             ],
-            "temperature": 0.1,
-            "response_format": {"type": "json_object"},
         }
+        self._apply_request_options(payload, temperature=0.1)
         trace_id = self._write_trace_request("repair", payload)
         try:
             data = await self._post_chat(payload)
@@ -296,8 +380,12 @@ class ModelRouter:
             return RepairResult(repaired_code=self._fallback_code(teaching_goal, 300), notes=f"模型修复调用失败，已使用本地可运行兜底版本：{exc}")
 
     async def _post_chat(self, payload: dict[str, Any]) -> dict[str, Any]:
+        if self._provider_disabled_reason:
+            raise ModelProviderUnavailableError(self._provider_disabled_reason)
         url = self.config.base_url.rstrip("/") + "/chat/completions"
-        headers = {"Authorization": f"Bearer {self.config.api_key}", "Content-Type": "application/json"}
+        headers = {"Content-Type": "application/json", **self.config.parameters.extra_headers}
+        if self.config.api_key:
+            headers.setdefault("Authorization", f"Bearer {self.config.api_key}")
         timeout = httpx.Timeout(connect=20, read=180, write=30, pool=20)
         last_error: Exception | None = None
         async with httpx.AsyncClient(timeout=timeout) as client:
@@ -308,6 +396,9 @@ class ModelRouter:
                     return response.json()
                 except httpx.HTTPStatusError as exc:
                     body = exc.response.text[:800]
+                    if exc.response.status_code == 402:
+                        self._provider_disabled_reason = "模型 API 余额不足，当前任务已切换为本地兜底生成。"
+                        raise ModelProviderUnavailableError(self._provider_disabled_reason) from exc
                     raise RuntimeError(
                         f"Model provider returned HTTP {exc.response.status_code} {exc.response.reason_phrase}. "
                         f"Check API balance, model access, Base URL, and model name. Response: {body}"
@@ -323,6 +414,9 @@ class ModelRouter:
     def _build_user_content(self, prompt: str, image_path: Path | None) -> str | list[dict[str, Any]]:
         if not image_path:
             return prompt
+        capabilities = self.config.capabilities.normalize()
+        if not (capabilities.vision and capabilities.image_upload and capabilities.multimodal_input):
+            raise ModelCapabilityError(VISION_REQUIRED_MESSAGE)
         try:
             encoded = base64.b64encode(image_path.read_bytes()).decode("ascii")
             mime = "image/png" if image_path.suffix.lower() == ".png" else "image/jpeg"
@@ -333,6 +427,15 @@ class ModelRouter:
         except OSError:
             logger.warning("Image could not be attached to model request; continuing with text context.")
             return prompt
+
+    def _apply_request_options(self, payload: dict[str, Any], *, temperature: float) -> None:
+        params = self.config.parameters
+        payload["temperature"] = params.temperature if params.temperature is not None else temperature
+        payload["top_p"] = params.top_p
+        payload["max_tokens"] = params.max_tokens
+        if self.config.capabilities.json_output:
+            payload["response_format"] = {"type": "json_object"}
+        payload.update(params.extra_body)
 
     def _write_trace_request(self, step: str, payload: dict[str, Any]) -> str:
         trace_id = self._next_trace_id(step)
@@ -371,7 +474,8 @@ class ModelRouter:
         if isinstance(value, dict):
             sanitized = {}
             for key, item in value.items():
-                if key.lower() in {"authorization", "api_key"}:
+                sensitive_key = key.lower()
+                if any(marker in sensitive_key for marker in ("authorization", "api_key", "apikey", "token", "secret")):
                     sanitized[key] = "[REDACTED]"
                 elif key == "image_url":
                     sanitized[key] = {"url": "[base64 image omitted]"}
@@ -658,139 +762,134 @@ class ModelRouter:
         return labels
 
     def _generic_code_from_storyboard(self, plan: TeachingPlan, total_duration_seconds: int) -> str:
-        """Compile storyboard visual plans into concrete Manim primitives.
-
-        This is intentionally not a topic template.  It reads each scene's
-        visual_plan and chooses small reusable visual skills: layered sections,
-        force paths, water paths, particles, machinery, comparison diagrams,
-        timelines, and relationship flows.
-        """
+        """Compile a topic-isolated fallback without exposing internal prompt text."""
 
         compact_timing = "COMPACT_TIMING" in plan.code_plan or "compact timing" in plan.code_plan.lower()
-        safe_goal = plan.teaching_goal.replace("\\", "\\\\")[:110]
+        plan_text = " ".join(
+            [plan.teaching_goal, plan.code_plan]
+            + [f"{scene.title} {scene.narration} {scene.visual_plan}" for scene in plan.scenes]
+        ).lower()
+        railway_topic = any(term in plan_text for term in ["铁路", "轨道", "钢轨", "轨枕", "道床", "道砟", "路基", "ballast", "railway"])
+        vibration_topic = any(term in plan_text for term in ["振动", "固有频率", "质量矩阵", "刚度矩阵", "质量块", "弹簧", "vibration", "spring"])
+        geography_topic = any(term in plan_text for term in ["地理", "半岛", "海域", "山脉", "边界", "位置", "地图", "geography", "map"])
+        math_topic = any(term in plan_text for term in ["矩阵", "特征值", "特征向量", "向量", "坐标系", "matrix", "eigen"])
+        bridge_topic = any(
+            term in plan_text
+            for term in [
+                "斜拉桥",
+                "悬索桥",
+                "桥塔",
+                "主梁",
+                "斜拉索",
+                "主缆",
+                "吊索",
+                "锚碇",
+                "索力",
+                "cable-stayed",
+                "suspension bridge",
+                "bridge",
+            ]
+        )
+        main_title = plan.scenes[0].title if len(plan.scenes) == 1 else plan.teaching_goal
         lines = [
             "from manim import *",
             "import numpy as np",
             "",
-            "",
             "def cn(text, font_size=24, color=WHITE):",
             "    return Text(text, font=\"Microsoft YaHei\", font_size=font_size, color=color)",
-            "",
             "",
             "class GeneratedTeachingScene(Scene):",
             "    def construct(self):",
             "        self.camera.background_color = \"#111827\"",
-            f"        title = cn({json.dumps(safe_goal, ensure_ascii=True)}, font_size=28, color=WHITE).to_edge(UP)",
-            "        subtitle = cn(\"分镜驱动生成：每一段都按 visual_plan 重新构图\", font_size=18, color=GRAY_A).next_to(title, DOWN, buff=0.12)",
-            "        self.play(Write(title), FadeIn(subtitle, shift=DOWN * 0.12), run_time=1.2)",
-            "        timeline = Line(LEFT * 4.5, RIGHT * 4.5, color=GRAY_B).shift(DOWN * 2.35)",
-            "        scene_dots = VGroup()",
-            f"        dot_count = {max(1, len(plan.scenes))}",
-            "        for i in range(dot_count):",
-            "            x = -4.2 + (8.4 * i / max(1, dot_count - 1))",
-            "            scene_dots.add(Dot(np.array([x, -2.35, 0]), radius=0.055, color=GRAY_B))",
-            "        timeline_group = VGroup(timeline, scene_dots)",
-            "        self.play(Create(timeline), FadeIn(scene_dots), run_time=0.8)",
+            f"        main_title = cn({json.dumps(main_title[:48], ensure_ascii=True)}, 32, WHITE).to_edge(UP)",
+            "        self.play(Write(main_title), run_time=1.0)",
             "        active = VGroup()",
             "",
             "        def clear_active():",
             "            nonlocal active",
-            "            if len(active) > 0:",
+            "            if len(active):",
             "                self.play(FadeOut(active), run_time=0.35)",
             "            active = VGroup()",
             "",
-            "        def layered_section():",
-            "            subgrade = Rectangle(width=7.8, height=0.62, color=MAROON_B, fill_color='#6b4f35', fill_opacity=0.55).shift(DOWN * 1.25)",
-            "            ballast = Polygon(LEFT * 3.15 + DOWN * 0.9, RIGHT * 3.15 + DOWN * 0.9, RIGHT * 2.35 + UP * 0.35, LEFT * 2.35 + UP * 0.35, color=ORANGE, fill_color='#7a5a22', fill_opacity=0.78)",
-            "            sleepers = VGroup(*[Rectangle(width=0.34, height=2.25, color=GRAY_B, fill_color=GRAY_D, fill_opacity=0.75).rotate(PI/2).shift(RIGHT * x + UP * 0.42) for x in [-2.1, -1.25, -0.4, 0.45, 1.3, 2.15]])",
-            "            rails = VGroup(Line(LEFT * 3.0 + UP * 0.92, RIGHT * 3.0 + UP * 0.92, color=GRAY_A, stroke_width=8), Line(LEFT * 3.0 + UP * 1.18, RIGHT * 3.0 + UP * 1.18, color=GRAY_A, stroke_width=8))",
-            "            labels = VGroup(cn('钢轨', 20, GRAY_A).next_to(rails, UP, buff=0.08), cn('轨枕', 20, GRAY_B).move_to(LEFT * 3.55 + UP * 0.45), cn('道床 / 道砟', 20, ORANGE).move_to(LEFT * 3.65 + DOWN * 0.25), cn('路基', 20, MAROON_A).move_to(LEFT * 3.75 + DOWN * 1.25))",
-            "            return VGroup(subgrade, ballast, sleepers, rails, labels)",
-            "",
-            "        def ballast_particles():",
-            "            dots = VGroup()",
-            "            for row, y in enumerate(np.linspace(-0.72, 0.15, 5)):",
-            "                span = 2.8 - row * 0.22",
-            "                for col, x in enumerate(np.linspace(-span, span, 9)):",
-            "                    dots.add(RegularPolygon(n=5, radius=0.075, color=YELLOW_E, fill_color='#8a6b2c', fill_opacity=0.8).rotate((row + col) * 0.37).shift(RIGHT * x + UP * y))",
-            "            return dots",
-            "",
-            "        def force_path():",
-            "            top = UP * 1.65",
-            "            arrows = VGroup(Arrow(top, UP * 0.9, color=RED_C, stroke_width=6, buff=0), Arrow(UP * 0.62, LEFT * 1.7 + DOWN * 0.55, color=YELLOW, stroke_width=4, buff=0), Arrow(UP * 0.62, RIGHT * 1.7 + DOWN * 0.55, color=YELLOW, stroke_width=4, buff=0), Arrow(UP * 0.25, DOWN * 1.05, color=ORANGE, stroke_width=5, buff=0))",
-            "            return VGroup(arrows, cn('轮载', 20, RED_C).next_to(arrows[0], UP, buff=0.05), cn('扩散到更大面积', 20, YELLOW).shift(RIGHT * 2.4 + DOWN * 0.15))",
-            "",
-            "        def drainage_path():",
-            "            drops = VGroup(*[Dot(LEFT * x + UP * 1.65, radius=0.045, color=BLUE_C) for x in [-1.8, -0.9, 0, 0.9, 1.8]])",
-            "            flows = VGroup(Arrow(UP * 0.45, LEFT * 2.2 + DOWN * 0.65, color=BLUE_C, buff=0, stroke_width=4), Arrow(UP * 0.45, RIGHT * 2.2 + DOWN * 0.65, color=BLUE_C, buff=0, stroke_width=4))",
-            "            return VGroup(drops, flows, cn('空隙排水', 21, BLUE_C).shift(RIGHT * 2.9 + UP * 0.45))",
-            "",
-            "        def elastic_spring():",
-            "            points = [LEFT * 1.0 + DOWN * 1.35, LEFT * 0.65 + DOWN * 1.0, LEFT * 0.3 + DOWN * 1.35, RIGHT * 0.05 + DOWN * 1.0, RIGHT * 0.4 + DOWN * 1.35, RIGHT * 0.75 + DOWN * 1.0, RIGHT * 1.1 + DOWN * 1.35]",
-            "            spring = VMobject(color=GREEN_B, stroke_width=5).set_points_as_corners(points)",
-            "            load = Arrow(UP * 1.55, UP * 0.82, color=RED_C, stroke_width=6, buff=0)",
-            "            return VGroup(spring, load, cn('弹性压缩与回弹', 21, GREEN_B).shift(RIGHT * 2.4 + DOWN * 0.85))",
-            "",
-            "        def construction_machine():",
-            "            body = RoundedRectangle(width=1.65, height=0.62, corner_radius=0.08, color=BLUE_C, fill_color='#12324a', fill_opacity=0.85).shift(UP * 1.35)",
-            "            cabin = Rectangle(width=0.46, height=0.42, color=BLUE_B, fill_opacity=0.65).next_to(body, UP, buff=0.02).shift(LEFT * 0.35)",
-            "            tampers = VGroup(*[Line(body.get_bottom() + RIGHT * x, body.get_bottom() + RIGHT * x + DOWN * 1.18, color=YELLOW, stroke_width=5) for x in [-0.45, 0, 0.45]])",
-            "            return VGroup(body, cabin, tampers, cn('捣固 / 稳定 / 整形机具', 20, YELLOW).next_to(body, UP, buff=0.16))",
-            "",
-            "        def comparison_view(labels):",
-            "            left = VGroup(Polygon(LEFT * 2.9 + DOWN * 0.9, LEFT * 0.6 + DOWN * 0.9, LEFT * 0.95 + UP * 0.25, LEFT * 2.55 + UP * 0.25, color=ORANGE, fill_opacity=0.65), cn(labels[0], 20, ORANGE).shift(LEFT * 1.75 + DOWN * 1.25))",
-            "            right = VGroup(Rectangle(width=2.35, height=0.42, color=GRAY_B, fill_opacity=0.65).shift(RIGHT * 1.75 + DOWN * 0.25), cn(labels[1], 20, GRAY_B).shift(RIGHT * 1.75 + DOWN * 1.25))",
-            "            return VGroup(left, right)",
-            "",
-            "        def relation_flow(labels):",
-            "            nodes = VGroup()",
-            "            for i, text in enumerate(labels[:4]):",
-            "                box = RoundedRectangle(width=1.45, height=0.58, corner_radius=0.08, color=[BLUE_C, GREEN_B, YELLOW, ORANGE][i], fill_opacity=0.18).shift(LEFT * 3.0 + RIGHT * i * 2.0 + UP * 0.1)",
-            "                nodes.add(VGroup(box, cn(text, 18, WHITE).move_to(box)))",
-            "            arrows = VGroup(*[Arrow(nodes[i].get_right(), nodes[i+1].get_left(), color=GRAY_B, buff=0.08) for i in range(len(nodes)-1)])",
-            "            return VGroup(nodes, arrows)",
+            "        def focus_constellation(labels):",
+            "            center = VGroup(Circle(radius=0.9, color=BLUE_C, fill_opacity=0.24), cn(labels[0][:8], 20, WHITE))",
+            "            offsets = [LEFT*3+UP*0.9, RIGHT*3+UP*0.9, DOWN*2.0]",
+            "            satellites = VGroup(*[VGroup(Dot(radius=0.16, color=[GREEN_B, YELLOW, ORANGE][i]), cn(labels[i+1][:8], 18, WHITE)).arrange(DOWN, buff=0.16).move_to(offsets[i]) for i in range(3)])",
+            "            links = VGroup(*[DashedLine(center.get_center(), item[0].get_center(), color=GRAY_B, dash_length=0.12) for item in satellites])",
+            "            return VGroup(center, satellites, links)",
         ]
-        for scene in plan.scenes:
-            wait_time = max(1.5, min(float(scene.estimated_seconds) - 4.0, 3.5 if compact_timing else 16.0))
-            title = json.dumps(f"{scene.index}. {scene.title}"[:56], ensure_ascii=True)
-            narration = json.dumps(scene.narration[:82], ensure_ascii=True)
-            visual = json.dumps(scene.visual_plan[:78], ensure_ascii=True)
-            scene_text = (scene.title + " " + scene.narration + " " + scene.visual_plan).lower()
-            color = "YELLOW" if scene.index % 3 == 1 else ("BLUE" if scene.index % 3 == 2 else "GREEN")
+        if geography_topic:
+            lines.extend([
+                "",
+                "        def geography_view(labels):",
+                "            region = Polygon(LEFT*1.4+UP*1.2, RIGHT*0.8+UP*1.5, RIGHT*1.5, RIGHT*0.7+DOWN*1.6, LEFT*1.0+DOWN*1.2, color=BLUE_C, fill_opacity=0.22)",
+                "            compass = VGroup(Arrow(LEFT*2.4+DOWN*0.8, LEFT*2.4+UP*0.4, color=YELLOW, buff=0), cn('北', 18, YELLOW).shift(LEFT*2.4+UP*0.65))",
+                "            tags = VGroup(*[cn(text[:10], 18, WHITE).move_to(region.get_center()+RIGHT*2.4+DOWN*0.55*i+UP*0.8) for i, text in enumerate(labels[:4])])",
+                "            return VGroup(region, compass, tags)",
+            ])
+        if vibration_topic:
+            lines.extend([
+                "",
+                "        def mass_spring_view():",
+                "            wall = Rectangle(width=0.35, height=1.6, color=GRAY_B, fill_opacity=0.6).shift(LEFT*4)",
+                "            masses = VGroup(Square(0.8, color=BLUE_C, fill_opacity=0.55).shift(LEFT*1.4), Square(0.8, color=GREEN_B, fill_opacity=0.55).shift(RIGHT*1.6))",
+                "            spring1 = VMobject(color=YELLOW).set_points_as_corners([LEFT*3.8, LEFT*3.2+UP*0.18, LEFT*2.7+DOWN*0.18, LEFT*2.2+UP*0.18, masses[0].get_left()])",
+                "            spring2 = VMobject(color=YELLOW).set_points_as_corners([masses[0].get_right(), LEFT*0.5+UP*0.18, ORIGIN+DOWN*0.18, RIGHT*0.55+UP*0.18, masses[1].get_left()])",
+                "            arrows = VGroup(Arrow(masses[0].get_bottom()+DOWN*0.2, masses[0].get_bottom()+RIGHT*0.8+DOWN*0.2, color=RED_C, buff=0), Arrow(masses[1].get_bottom()+DOWN*0.2, masses[1].get_bottom()+RIGHT*1.25+DOWN*0.2, color=RED_C, buff=0))",
+                "            return VGroup(wall, masses, spring1, spring2, arrows, cn('m₁', 20).move_to(masses[0]), cn('m₂', 20).move_to(masses[1]))",
+            ])
+        if math_topic:
+            lines.extend([
+                "",
+                "        def matrix_view():",
+                "            plane = NumberPlane(x_range=[-3,3,1], y_range=[-2,2,1], x_length=6, y_length=4, background_line_style={'stroke_opacity':0.25})",
+                "            vectors = VGroup(Arrow(ORIGIN, RIGHT*2+UP*0.4, color=RED_C, buff=0), Arrow(ORIGIN, LEFT*0.4+UP*1.5, color=BLUE_C, buff=0))",
+                "            return VGroup(plane, vectors)",
+            ])
+        if bridge_topic:
+            lines.extend([
+                "",
+                "        def bridge_view():",
+                "            deck = Rectangle(width=7.8, height=0.18, color=ORANGE, fill_opacity=0.7).shift(DOWN*1.1)",
+                "            towers = VGroup(*[Rectangle(width=0.22, height=3.1, color=BLUE_C, fill_opacity=0.55).shift(RIGHT*x+UP*0.25) for x in [-1.8, 1.8]])",
+                "            cables = VGroup(*[Line(towers[0].get_top(), deck.get_top()+RIGHT*x, color=TEAL_C, stroke_width=3) for x in [-3.5,-2.8,-1.0,-0.3]], *[Line(towers[1].get_top(), deck.get_top()+RIGHT*x, color=TEAL_C, stroke_width=3) for x in [0.3,1.0,2.8,3.5]])",
+                "            loads = VGroup(*[Arrow(UP*0.2+RIGHT*x, DOWN*0.9+RIGHT*x, color=RED_C, buff=0) for x in [-2.8,0,2.8]])",
+                "            return VGroup(deck, towers, cables, loads)",
+            ])
+        if railway_topic:
+            lines.extend([
+                "",
+                "        def railway_section():",
+                "            base = Rectangle(width=7.4, height=0.62, color=MAROON_B, fill_opacity=0.5).shift(DOWN*1.2)",
+                "            bed = Polygon(LEFT*3+DOWN*0.85, RIGHT*3+DOWN*0.85, RIGHT*2.3+UP*0.25, LEFT*2.3+UP*0.25, color=ORANGE, fill_opacity=0.65)",
+                "            sleepers = VGroup(*[Rectangle(width=0.35, height=2.1, color=GRAY_B, fill_opacity=0.65).rotate(PI/2).shift(RIGHT*x+UP*0.35) for x in [-2,-1.2,-0.4,0.4,1.2,2]])",
+                "            rails = VGroup(Line(LEFT*3+UP*0.85, RIGHT*3+UP*0.85, color=GRAY_A, stroke_width=7), Line(LEFT*3+UP*1.1, RIGHT*3+UP*1.1, color=GRAY_A, stroke_width=7))",
+                "            return VGroup(base, bed, sleepers, rails)",
+            ])
+        for position, scene in enumerate(plan.scenes):
+            wait_time = max(1.2, min(float(scene.estimated_seconds) - 3.0, 3.0 if compact_timing else 10.0))
+            scene_text = f"{scene.title} {scene.narration} {scene.visual_plan}".lower()
             labels = json.dumps(self._labels_from_scene(scene), ensure_ascii=True)
+            beat_title = json.dumps(scene.title[:44], ensure_ascii=True)
             lines.extend([
                 "        clear_active()",
-                f"        beat_title = cn({title}, font_size=24, color={color}).to_edge(LEFT).shift(UP * 2.72)",
-                f"        beat_note = cn({narration}, font_size=19, color=WHITE).next_to(beat_title, DOWN, aligned_edge=LEFT)",
-                f"        beat_visual = cn({visual}, font_size=17, color=GRAY_A).next_to(beat_note, DOWN, aligned_edge=LEFT, buff=0.12)",
-                "        panel = VGroup(beat_title, beat_note, beat_visual)",
-                "        self.play(FadeIn(panel, shift=UP * 0.15), run_time=0.8)",
-                f"        scene_dots[{max(0, scene.index - 1) % max(1, len(plan.scenes))}].set_color(YELLOW).scale(1.35)",
+                f"        beat_title = cn({beat_title}, 24, {['BLUE_C','GREEN_B','YELLOW'][position % 3]}).next_to(main_title, DOWN, buff=0.3)",
+                "        self.play(FadeIn(beat_title, shift=DOWN*0.1), run_time=0.7)",
             ])
-            if any(keyword in scene_text for keyword in ["断面", "分层", "道床", "道砟", "轨枕", "钢轨", "路基", "ballast", "subgrade", "rail", "sleeper"]):
-                lines.extend(["        active = layered_section()", "        self.play(Create(active[0]), Create(active[1]), LaggedStart(*[FadeIn(m) for m in active[2]], lag_ratio=0.04), Create(active[3]), FadeIn(active[4]), run_time=1.8)"])
-                if any(keyword in scene_text for keyword in ["碎石", "颗粒", "道砟", "卵石", "空隙", "dirty", "particle"]):
-                    lines.extend(["        particles = ballast_particles()", "        active.add(particles)", "        self.play(LaggedStart(*[FadeIn(p) for p in particles], lag_ratio=0.01), run_time=0.9)"])
-            elif any(keyword in scene_text for keyword in ["荷载", "应力", "传递", "扩散", "压力", "受力", "轮载", "load", "stress", "force"]):
-                lines.extend(["        active = VGroup(layered_section(), force_path())", "        self.play(FadeIn(active[0]), run_time=0.9)", "        self.play(LaggedStart(*[GrowArrow(a) for a in active[1][0]], lag_ratio=0.16), FadeIn(active[1][1:]), run_time=1.5)"])
-            elif any(keyword in scene_text for keyword in ["排水", "雨", "水流", "空隙", "横坡", "drainage", "water"]):
-                lines.extend(["        active = VGroup(layered_section(), drainage_path())", "        self.play(FadeIn(active[0]), run_time=0.9)", "        self.play(LaggedStart(*[FadeIn(d) for d in active[1][0]], lag_ratio=0.1), LaggedStart(*[GrowArrow(a) for a in active[1][1]], lag_ratio=0.15), FadeIn(active[1][2]), run_time=1.4)"])
-            elif any(keyword in scene_text for keyword in ["弹性", "缓冲", "压缩", "回弹", "振动", "elastic", "spring"]):
-                lines.extend(["        active = VGroup(layered_section(), elastic_spring())", "        self.play(FadeIn(active[0]), Create(active[1][0]), GrowArrow(active[1][1]), FadeIn(active[1][2]), run_time=1.5)", "        self.play(active[1][0].animate.scale(0.72, about_edge=DOWN), run_time=0.45)", "        self.play(active[1][0].animate.scale(1.38, about_edge=DOWN), run_time=0.55)"])
-            elif any(keyword in scene_text for keyword in ["施工", "铺砟", "捣固", "稳定", "整形", "机具", "机械", "机床", "tamping", "machine"]):
-                lines.extend(["        active = VGroup(layered_section(), construction_machine())", "        self.play(FadeIn(active[0]), FadeIn(active[1][0]), FadeIn(active[1][1]), FadeIn(active[1][3]), run_time=1.2)", "        self.play(LaggedStart(*[Create(t) for t in active[1][2]], lag_ratio=0.08), run_time=0.7)", "        self.play(active[1][2].animate.shift(DOWN * 0.28), run_time=0.35)", "        self.play(active[1][2].animate.shift(UP * 0.28), run_time=0.35)"])
-            elif any(keyword in scene_text for keyword in ["对比", "类型", "分类", "有砟", "无砟", "比较", "compare", "type"]):
-                lines.extend([f"        active = comparison_view({labels})", "        self.play(FadeIn(active[0], shift=LEFT * 0.2), FadeIn(active[1], shift=RIGHT * 0.2), run_time=1.2)", "        self.play(Circumscribe(active[0], color=ORANGE), Circumscribe(active[1], color=GRAY_B), run_time=1.1)"])
+            if railway_topic and any(term in scene_text for term in ["轨", "道床", "道砟", "路基", "荷载", "排水", "施工", "振动"]):
+                lines.extend(["        active = railway_section()", "        self.play(FadeIn(active), run_time=1.4)"])
+            elif bridge_topic:
+                lines.extend(["        active = bridge_view()", "        self.play(Create(active[0]), FadeIn(active[1]), LaggedStart(*[Create(cable) for cable in active[2]], lag_ratio=0.08), LaggedStart(*[GrowArrow(load) for load in active[3]], lag_ratio=0.1), run_time=1.6)"])
+            elif any(term in scene_text for term in ["振动", "固有频率", "质量矩阵", "刚度矩阵", "质量块", "弹簧", "vibration", "spring"]):
+                lines.extend(["        active = mass_spring_view()", "        self.play(FadeIn(active[0:4]), GrowArrow(active[4][0]), GrowArrow(active[4][1]), FadeIn(active[5:]), run_time=1.5)", "        self.play(active[4][1].animate.scale(1.25, about_edge=LEFT), run_time=0.8)"])
+            elif any(term in scene_text for term in ["地理", "半岛", "海", "山", "边界", "位置", "地图", "geography", "map"]):
+                lines.extend([f"        active = geography_view({labels})", "        self.play(Create(active[0]), GrowArrow(active[1][0]), FadeIn(active[1][1]), LaggedStart(*[FadeIn(tag) for tag in active[2]], lag_ratio=0.12), run_time=1.5)"])
+            elif any(term in scene_text for term in ["矩阵", "特征值", "特征向量", "向量", "坐标", "matrix", "eigen"]):
+                lines.extend(["        active = matrix_view()", "        self.play(Create(active[0]), GrowArrow(active[1][0]), GrowArrow(active[1][1]), run_time=1.5)"])
             else:
-                lines.extend([f"        active = relation_flow({labels})", "        self.play(LaggedStart(*[FadeIn(node) for node in active[0]], lag_ratio=0.12), LaggedStart(*[GrowArrow(a) for a in active[1]], lag_ratio=0.12), run_time=1.4)", "        self.play(Circumscribe(active, color=BLUE_C), run_time=0.8)"])
-            lines.extend([f"        self.wait({wait_time:.2f})", "        self.play(FadeOut(panel), run_time=0.45)"])
-        lines.extend([
-            "        summary = VGroup(cn(\"\\u5206\\u955c\\u6f14\\u793a\\u5b8c\\u6210\", font_size=34, color=YELLOW), cn(\"\\u753b\\u9762\\u5143\\u7d20\\u6765\\u81ea\\u5f53\\u524d\\u6559\\u5b66\\u8ba1\\u5212\\u548c\\u5206\\u955c\\u6587\\u672c\\u3002\", font_size=24, color=WHITE), cn(\"\\u672a\\u4f7f\\u7528\\u65e7\\u4e3b\\u9898\\u7d20\\u6750\\u6216\\u6570\\u5b66\\u5360\\u4f4d\\u56fe\\u3002\", font_size=22, color=GRAY_A)).arrange(DOWN, buff=0.25).move_to(ORIGIN)",
-            "        clear_active()",
-            "        self.play(FadeOut(timeline_group), ReplacementTransform(title, summary[0]), FadeIn(summary[1:]), run_time=1.6)",
-            "        self.wait(3)",
-            "",
-        ])
+                lines.extend([f"        active = focus_constellation({labels})", "        self.play(Create(active[0][0]), FadeIn(active[0][1]), run_time=0.8)", "        self.play(LaggedStart(*[Create(link) for link in active[2]], lag_ratio=0.12), LaggedStart(*[FadeIn(item, shift=UP*0.1) for item in active[1]], lag_ratio=0.12), run_time=1.3)"])
+            lines.extend([f"        self.wait({wait_time:.2f})", "        self.play(FadeOut(beat_title), run_time=0.35)"])
+        lines.extend(["        clear_active()", "        self.play(FadeOut(main_title), run_time=0.5)", "        self.wait(0.3)", ""])
         return "\n".join(lines)
 
     def _code_from_storyboard(self, plan: TeachingPlan, total_duration_seconds: int) -> str:

@@ -1,0 +1,188 @@
+{"kind":"deck","id":"pr/s7oahy","name":"Deck"}
+{"kind":"layout","layoutId":"e54fbe8d-cc61-4b7c-b60f-85d977b4a1ea","name":"Master","type":"master"}
+{"kind":"layout","layoutId":"379bb9e3-4ec3-4c84-b721-f4d0a572f298","name":"Title Slide","type":"title"}
+{"kind":"slide","id":"sl/71hun9","slide":1,"title":"桥梁工程课程设计","textShapes":4}
+{"kind":"shape","id":"sh/wb2hwfyx","slide":1,"bbox":[0,0,1280,720]}
+{"kind":"shape","id":"sh/3q5o7qpg","slide":1,"bbox":[0,0,760,720]}
+{"kind":"textbox","id":"sh/e9cvixcz","slide":1,"text":"桥梁工程课程设计","textPreview":"桥梁工程课程设计","textChars":8,"textLines":1,"bbox":[64,70,560,40]}
+{"kind":"textbox","id":"sh/loj2t83i","slide":1,"text":"基于 Manim 的教学动画生成\n与交互式审阅系统","textPreview":"基于 Manim 的教学动画生成 | 与交互式审阅系统","textChars":25,"textLines":2,"bbox":[64,152,620,210]}
+{"kind":"shape","id":"sh/w3m94fu1","slide":1,"bbox":[64,392,112,6]}
+{"kind":"textbox","id":"sh/3itgfmlk","slide":1,"text":"项目1：生成流水线  ×  项目2：Agent-in-the-loop 局部修订","textPreview":"项目1：生成流水线  ×  项目2：Agent-in-the-loop 局部修订","textChars":40,"textLines":1,"bbox":[64,420,630,76]}
+{"kind":"textbox","id":"sh/ex0nuxc3","slide":1,"text":"马琛籴  刘浩然  ·  智能交建23  ·  2025—2026学年第二学期","textPreview":"马琛籴  刘浩然  ·  智能交建23  ·  2025—2026学年第二学期","textChars":39,"textLines":1,"bbox":[64,630,660,32]}
+{"kind":"image","id":"im/8jqh0fep","slide":1,"name":"","alt":"image14.png","bbox":[700,0,580,720]}
+{"kind":"notes","id":"nt/71hun9","slide":1,"text":""}
+{"kind":"slide","id":"sl/g4pynw","slide":2,"title":"设计背景","textShapes":14}
+{"kind":"textbox","id":"sh/neloj2t8","slide":2,"text":"设计背景","textPreview":"设计背景","textChars":4,"textLines":1,"bbox":[52,26,340,28]}
+{"kind":"textbox","id":"sh/czed8v6p","slide":2,"text":"02","textPreview":"02","textChars":2,"textLines":1,"bbox":[1170,658,54,28]}
+{"kind":"textbox","id":"sh/5kb6xkf6","slide":2,"text":"为什么要把桥梁知识做成“可修改的动画”？","textPreview":"为什么要把桥梁知识做成“可修改的动画”？","textChars":20,"textLines":1,"bbox":[52,60,1120,62]}
+{"kind":"shape","id":"sh/u54zidon","slide":2,"bbox":[52,132,72,5]}
+{"kind":"shape","id":"sh/nqxs72x4","slide":2,"bbox":[52,174,540,88]}
+{"kind":"textbox","id":"sh/cbulwval","slide":2,"text":"结构体系复杂","textPreview":"结构体系复杂","textChars":6,"textLines":1,"bbox":[76,184,180,30]}
+{"kind":"textbox","id":"sh/5sneloj2","slide":2,"text":"单幅静态图难同时说清构造与受力","textPreview":"单幅静态图难同时说清构造与受力","textChars":15,"textLines":1,"bbox":[256,182,310,64]}
+{"kind":"shape","id":"sh/y90je9cv","slide":2,"bbox":[52,286,540,88]}
+{"kind":"textbox","id":"sh/nuxc3ylc","slide":2,"text":"传力路径抽象","textPreview":"传力路径抽象","textChars":6,"textLines":1,"bbox":[76,296,180,30]}
+{"kind":"textbox","id":"sh/36hcrmhk","slide":2,"text":"文字缺少方向和时间顺序","textPreview":"文字缺少方向和时间顺序","textChars":11,"textLines":1,"bbox":[256,294,310,64]}
+{"kind":"shape","id":"sh/eloj2t83","slide":2,"bbox":[52,398,540,88]}
+{"kind":"textbox","id":"sh/lc7u54zi","slide":2,"text":"修改成本高","textPreview":"修改成本高","textChars":5,"textLines":1,"bbox":[76,408,180,30]}
+{"kind":"textbox","id":"sh/wra5gbq1","slide":2,"text":"一处调整往往要重做整段演示","textPreview":"一处调整往往要重做整段演示","textChars":13,"textLines":1,"bbox":[256,406,310,64]}
+{"kind":"shape","id":"sh/7u54zido","slide":2,"bbox":[52,510,540,88]}
+{"kind":"textbox","id":"sh/ed8bat47","slide":2,"text":"反馈难定位","textPreview":"反馈难定位","textChars":5,"textLines":1,"bbox":[76,520,180,30]}
+{"kind":"textbox","id":"sh/l0rqd4vm","slide":2,"text":"“这里不清楚”无法直接对应代码对象","textPreview":"“这里不清楚”无法直接对应代码对象","textChars":17,"textLines":1,"bbox":[256,518,310,64]}
+{"kind":"textbox","id":"sh/wfyxobm5","slide":2,"text":"设计回应","textPreview":"设计回应","textChars":4,"textLines":1,"bbox":[690,170,450,38]}
+{"kind":"textbox","id":"sh/7mp0bi9s","slide":2,"text":"分镜化表达\n结构化生成\n编号批注\n局部重渲染\n版本回滚","textPreview":"分镜化表达 | 结构化生成 | 编号批注 | 局部重渲染 | 版本回滚","textChars":27,"textLines":5,"bbox":[690,226,470,292]}
+{"kind":"textbox","id":"sh/e1w7mp0b","slide":2,"text":"目标不是代替结构计算，而是让工程理解、表达组织与成果复核可执行、可追溯。","textPreview":"目标不是代替结构计算，而是让工程理解、表达组织与成果复核可执行、可追溯。","textChars":36,"textLines":1,"bbox":[690,548,480,70]}
+{"kind":"notes","id":"nt/g4pynw","slide":2,"text":""}
+{"kind":"slide","id":"sl/aptdby","slide":3,"title":"总体方案","textShapes":9}
+{"kind":"textbox","id":"sh/ih4byhgn","slide":3,"text":"总体方案","textPreview":"总体方案","textChars":4,"textLines":1,"bbox":[52,26,340,28]}
+{"kind":"textbox","id":"sh/p8nqxs72","slide":3,"text":"03","textPreview":"03","textChars":2,"textLines":1,"bbox":[1170,658,54,28]}
+{"kind":"textbox","id":"sh/0nuxc3yl","slide":3,"text":"两个项目组成一条闭环","textPreview":"两个项目组成一条闭环","textChars":10,"textLines":1,"bbox":[52,60,1120,62]}
+{"kind":"shape","id":"sh/7ed8bat4","slide":3,"bbox":[52,132,72,5]}
+{"kind":"shape","id":"sh/itgfmlkj","slide":3,"bbox":[52,176,552,410]}
+{"kind":"shape","id":"sh/pkzupwb2","slide":3,"bbox":[676,176,552,410]}
+{"kind":"textbox","id":"sh/0z61032l","slide":3,"text":"项目 1  ·  生成端","textPreview":"项目 1  ·  生成端","textChars":12,"textLines":1,"bbox":[82,204,460,42]}
+{"kind":"textbox","id":"sh/7qpg3ex0","slide":3,"text":"一句话输入\n→ 教学大纲与分镜\n→ ManimCE 代码\n→ 检查、渲染、修复\n→ 字幕、音频与项目导出","textPreview":"一句话输入 | → 教学大纲与分镜 | → ManimCE 代码 | → 检查、渲染、修复 | → 字幕、音频与项目导出","textChars":52,"textLines":5,"bbox":[82,266,450,244]}
+{"kind":"textbox","id":"sh/i5sneloj","slide":3,"text":"提高首次成片效率","textPreview":"提高首次成片效率","textChars":8,"textLines":1,"bbox":[82,526,440,34]}
+{"kind":"textbox","id":"sh/0nuxc3yl","slide":3,"text":"项目 2  ·  审阅端","textPreview":"项目 2  ·  审阅端","textChars":12,"textLines":1,"bbox":[706,204,460,42]}
+{"kind":"textbox","id":"sh/p8nqxs72","slide":3,"text":"视频时间轴\n→ 编号批注\n→ 分镜与对象匹配\n→ Agent Task\n→ 局部重渲染\n→ 接受修订或回滚","textPreview":"视频时间轴 | → 编号批注 | → 分镜与对象匹配 | → Agent Task | → 局部重渲染 | → 接受修订或回滚","textChars":53,"textLines":6,"bbox":[706,266,450,244]}
+{"kind":"textbox","id":"sh/ih4byhgn","slide":3,"text":"提高精细修改的可靠性","textPreview":"提高精细修改的可靠性","textChars":10,"textLines":1,"bbox":[706,526,440,34]}
+{"kind":"notes","id":"nt/aptdby","slide":3,"text":""}
+{"kind":"slide","id":"sl/dmroft","slide":4,"title":"系统设计","textShapes":6}
+{"kind":"textbox","id":"sh/cj6tovah","slide":4,"text":"系统设计","textPreview":"系统设计","textChars":4,"textLines":1,"bbox":[52,26,340,28]}
+{"kind":"textbox","id":"sh/nyd0z610","slide":4,"text":"04","textPreview":"04","textChars":2,"textLines":1,"bbox":[1170,658,54,28]}
+{"kind":"textbox","id":"sh/udg7adsj","slide":4,"text":"总体架构：本地化、分层化、文件化契约","textPreview":"总体架构：本地化、分层化、文件化契约","textChars":18,"textLines":1,"bbox":[52,60,1120,62]}
+{"kind":"shape","id":"sh/5gbq1ory","slide":4,"bbox":[52,132,72,5]}
+{"kind":"textbox","id":"sh/upwb2hwf","slide":4,"text":"项目1：Electron + FastAPI + Python + ManimCE","textPreview":"项目1：Electron + FastAPI + Python + ManimCE","textChars":41,"textLines":1,"bbox":[52,534,562,38]}
+{"kind":"textbox","id":"sh/1orytsvu","slide":4,"text":"项目2：React + FastAPI + Skill + 结构化文件","textPreview":"项目2：React + FastAPI + Skill + 结构化文件","textChars":35,"textLines":1,"bbox":[666,534,562,38]}
+{"kind":"textbox","id":"sh/c7u54zid","slide":4,"text":"共享思想：分镜是最小教学单元；日志与版本是质量保障。","textPreview":"共享思想：分镜是最小教学单元；日志与版本是质量保障。","textChars":26,"textLines":1,"bbox":[126,610,1028,36]}
+{"kind":"image","id":"im/5gbq1ory","slide":4,"name":"","alt":"image1.png","bbox":[52,174,562,350]}
+{"kind":"image","id":"im/upwb2hwf","slide":4,"name":"","alt":"image2.png","bbox":[666,174,562,350]}
+{"kind":"notes","id":"nt/dmroft","slide":4,"text":""}
+{"kind":"slide","id":"sl/g58pv4","slide":5,"title":"生成流水线","textShapes":6}
+{"kind":"textbox","id":"sh/sji5snel","slide":5,"text":"生成流水线","textPreview":"生成流水线","textChars":5,"textLines":1,"bbox":[52,26,340,28]}
+{"kind":"textbox","id":"sh/3ylc7u54","slide":5,"text":"05","textPreview":"05","textChars":2,"textLines":1,"bbox":[1170,658,54,28]}
+{"kind":"textbox","id":"sh/adsji5sn","slide":5,"text":"项目1：从问题定框到成片导出","textPreview":"项目1：从问题定框到成片导出","textChars":14,"textLines":1,"bbox":[52,60,1120,62]}
+{"kind":"shape","id":"sh/lszqtcj6","slide":5,"bbox":[52,132,72,5]}
+{"kind":"textbox","id":"sh/3m94fu18","slide":5,"text":"关键策略","textPreview":"关键策略","textChars":4,"textLines":1,"bbox":[52,552,160,34]}
+{"kind":"textbox","id":"sh/a5gbq1or","slide":5,"text":"语法检查前置  ·  渲染超时控制  ·  最多 3 轮自动修复  ·  失败日志全量保留","textPreview":"语法检查前置  ·  渲染超时控制  ·  最多 3 轮自动修复  ·  失败日志全量保留","textChars":45,"textLines":1,"bbox":[228,552,1000,34]}
+{"kind":"textbox","id":"sh/hoza1gvy","slide":5,"text":"问题定框文件在大纲、分镜、代码阶段保持不变，防止多轮生成偏离桥梁主题。","textPreview":"问题定框文件在大纲、分镜、代码阶段保持不变，防止多轮生成偏离桥梁主题。","textChars":35,"textLines":1,"bbox":[52,608,1120,42]}
+{"kind":"image","id":"im/tsvu9kni","slide":5,"name":"","alt":"image18.png","bbox":[52,170,1176,360]}
+{"kind":"notes","id":"nt/g58pv4","slide":5,"text":""}
+{"kind":"slide","id":"sl/wqdw35","slide":6,"title":"项目1功能","textShapes":7}
+{"kind":"textbox","id":"sh/d0z61032","slide":6,"text":"项目1功能","textPreview":"项目1功能","textChars":5,"textLines":1,"bbox":[52,26,340,28]}
+{"kind":"textbox","id":"sh/29gr2p8n","slide":6,"text":"06","textPreview":"06","textChars":2,"textLines":1,"bbox":[1170,658,54,28]}
+{"kind":"textbox","id":"sh/vu9knih4","slide":6,"text":"两种入口：快速生成与节点工作流","textPreview":"两种入口：快速生成与节点工作流","textChars":15,"textLines":1,"bbox":[52,60,1120,62]}
+{"kind":"shape","id":"sh/knih4byh","slide":6,"bbox":[52,132,72,5]}
+{"kind":"textbox","id":"sh/v6psfil0","slide":6,"text":"节点工作流","textPreview":"节点工作流","textChars":5,"textLines":1,"bbox":[52,522,566,36]}
+{"kind":"textbox","id":"sh/kre1w7mp","slide":6,"text":"快速生成与片段管理","textPreview":"快速生成与片段管理","textChars":9,"textLines":1,"bbox":[662,522,566,36]}
+{"kind":"textbox","id":"sh/dcbulwva","slide":6,"text":"端口类型校验 · DAG验证 · 拓扑执行 · 状态快照","textPreview":"端口类型校验 · DAG验证 · 拓扑执行 · 状态快照","textChars":28,"textLines":1,"bbox":[52,578,566,52]}
+{"kind":"textbox","id":"sh/lszqtcj6","slide":6,"text":"输入主题后跟踪阶段、进度、日志，并支持分镜局部重渲染","textPreview":"输入主题后跟踪阶段、进度、日志，并支持分镜局部重渲染","textChars":26,"textLines":1,"bbox":[662,578,566,52]}
+{"kind":"image","id":"im/0rqd4vmt","slide":6,"name":"","alt":"image10.png","bbox":[52,176,566,330]}
+{"kind":"image","id":"im/b6xkf6dc","slide":6,"name":"","alt":"image8.png","bbox":[662,176,566,330]}
+{"kind":"notes","id":"nt/wqdw35","slide":6,"text":""}
+{"kind":"slide","id":"sl/95jd1d","slide":7,"title":"交互式审阅","textShapes":6}
+{"kind":"textbox","id":"sh/90je9cvi","slide":7,"text":"交互式审阅","textPreview":"交互式审阅","textChars":5,"textLines":1,"bbox":[52,26,340,28]}
+{"kind":"textbox","id":"sh/yd0z6103","slide":7,"text":"07","textPreview":"07","textChars":2,"textLines":1,"bbox":[1170,658,54,28]}
+{"kind":"textbox","id":"sh/rytsvu9k","slide":7,"text":"项目2：把“这里要改”变成可执行任务","textPreview":"项目2：把“这里要改”变成可执行任务","textChars":18,"textLines":1,"bbox":[52,60,1120,62]}
+{"kind":"shape","id":"sh/g7adsji5","slide":7,"bbox":[52,132,72,5]}
+{"kind":"textbox","id":"sh/rmhk3q5o","slide":7,"text":"三重定位边界","textPreview":"三重定位边界","textChars":6,"textLines":1,"bbox":[630,414,480,38]}
+{"kind":"textbox","id":"sh/g3ex0nux","slide":7,"text":"时间边界：shot_map\n代码边界：scene_class 行区间\n对象边界：SHOT_ID + OBJECT_ID","textPreview":"时间边界：shot_map | 代码边界：scene_class 行区间 | 对象边界：SHOT_ID + OBJECT_ID","textChars":59,"textLines":3,"bbox":[630,468,520,124]}
+{"kind":"textbox","id":"sh/5o7qpg3e","slide":7,"text":"失败不创建“成功修订”；可随时恢复前一版本。","textPreview":"失败不创建“成功修订”；可随时恢复前一版本。","textChars":22,"textLines":1,"bbox":[630,606,520,34]}
+{"kind":"image","id":"im/gn29gr2p","slide":7,"name":"","alt":"image19.png","bbox":[52,170,1176,210]}
+{"kind":"image","id":"im/n29gr2p8","slide":7,"name":"","alt":"image11.png","bbox":[52,410,520,230]}
+{"kind":"notes","id":"nt/95jd1d","slide":7,"text":""}
+{"kind":"slide","id":"sl/m8jvn2","slide":8,"title":"工程语义验证","textShapes":9}
+{"kind":"textbox","id":"sh/9cvixcze","slide":8,"text":"工程语义验证","textPreview":"工程语义验证","textChars":6,"textLines":1,"bbox":[52,26,340,28]}
+{"kind":"textbox","id":"sh/ylc7u54z","slide":8,"text":"08","textPreview":"08","textChars":2,"textLines":1,"bbox":[1170,658,54,28]}
+{"kind":"textbox","id":"sh/r65wjudg","slide":8,"text":"斜拉桥示例：从构件识别到荷载传递","textPreview":"斜拉桥示例：从构件识别到荷载传递","textChars":16,"textLines":1,"bbox":[52,60,1120,62]}
+{"kind":"shape","id":"sh/g3ex0nux","slide":8,"bbox":[52,132,72,5]}
+{"kind":"shape","id":"sh/yxobm58z","slide":8,"bbox":[52,530,360,100]}
+{"kind":"shape","id":"sh/nih4byhg","slide":8,"bbox":[460,530,360,100]}
+{"kind":"shape","id":"sh/g7adsji5","slide":8,"bbox":[868,530,360,100]}
+{"kind":"textbox","id":"sh/9s36hcrm","slide":8,"text":"01  建立总体认知","textPreview":"01  建立总体认知","textChars":10,"textLines":1,"bbox":[76,546,310,30]}
+{"kind":"textbox","id":"sh/d8v6psfi","slide":8,"text":"桥面—桥塔—扇形斜拉索","textPreview":"桥面—桥塔—扇形斜拉索","textChars":11,"textLines":1,"bbox":[76,584,310,30]}
+{"kind":"textbox","id":"sh/onyd0z61","slide":8,"text":"02  解释传力路径","textPreview":"02  解释传力路径","textChars":10,"textLines":1,"bbox":[484,546,310,30]}
+{"kind":"textbox","id":"sh/z25kb6xk","slide":8,"text":"车辆→桥面→斜拉索→桥塔→地基","textPreview":"车辆→桥面→斜拉索→桥塔→地基","textChars":15,"textLines":1,"bbox":[484,584,310,30]}
+{"kind":"textbox","id":"sh/6hcrmhk3","slide":8,"text":"03  归纳受力要点","textPreview":"03  归纳受力要点","textChars":10,"textLines":1,"bbox":[892,546,310,30]}
+{"kind":"textbox","id":"sh/dg7adsji","slide":8,"text":"索受拉 · 塔受压 · 无跨全桥主缆","textPreview":"索受拉 · 塔受压 · 无跨全桥主缆","textChars":18,"textLines":1,"bbox":[892,584,310,30]}
+{"kind":"image","id":"im/czed8v6p","slide":8,"name":"","alt":"image16.png","bbox":[52,174,1176,320]}
+{"kind":"notes","id":"nt/m8jvn2","slide":8,"text":""}
+{"kind":"slide","id":"sl/akpyug","slide":9,"title":"关键实现","textShapes":11}
+{"kind":"textbox","id":"sh/nuxc3ylc","slide":9,"text":"关键实现","textPreview":"关键实现","textChars":4,"textLines":1,"bbox":[52,26,340,28]}
+{"kind":"textbox","id":"sh/gbq1oryt","slide":9,"text":"09","textPreview":"09","textChars":2,"textLines":1,"bbox":[1170,658,54,28]}
+{"kind":"textbox","id":"sh/5wjudg7a","slide":9,"text":"核心技术：把生成的不确定性约束在流程中","textPreview":"核心技术：把生成的不确定性约束在流程中","textChars":19,"textLines":1,"bbox":[52,60,1120,62]}
+{"kind":"shape","id":"sh/yhgn29gr","slide":9,"bbox":[52,132,72,5]}
+{"kind":"shape","id":"sh/n29gr2p8","slide":9,"bbox":[52,180,550,176]}
+{"kind":"textbox","id":"sh/gn29gr2p","slide":9,"text":"工程语义→视觉语言","textPreview":"工程语义→视觉语言","textChars":9,"textLines":1,"bbox":[82,204,490,38]}
+{"kind":"textbox","id":"sh/58z25kb6","slide":9,"text":"教学目标、visual_plan、对象清单三层映射","textPreview":"教学目标、visual_plan、对象清单三层映射","textChars":25,"textLines":1,"bbox":[82,258,490,66]}
+{"kind":"shape","id":"sh/ytsvu9kn","slide":9,"bbox":[650,180,550,176]}
+{"kind":"textbox","id":"sh/neloj2t8","slide":9,"text":"DAG 与类型系统","textPreview":"DAG 与类型系统","textChars":9,"textLines":1,"bbox":[680,204,490,38]}
+{"kind":"textbox","id":"sh/nap4r65w","slide":9,"text":"运行前发现环路、端口错配和缺失输入","textPreview":"运行前发现环路、端口错配和缺失输入","textChars":17,"textLines":1,"bbox":[680,258,490,66]}
+{"kind":"shape","id":"sh/upwb2hwf","slide":9,"bbox":[52,398,550,176]}
+{"kind":"textbox","id":"sh/5gbq1ory","slide":9,"text":"异步任务与恢复","textPreview":"异步任务与恢复","textChars":7,"textLines":1,"bbox":[82,422,490,38]}
+{"kind":"textbox","id":"sh/cvixczed","slide":9,"text":"长时渲染不阻塞界面，重启后识别中断任务","textPreview":"长时渲染不阻塞界面，重启后识别中断任务","textChars":19,"textLines":1,"bbox":[82,476,490,66]}
+{"kind":"shape","id":"sh/nyd0z610","slide":9,"bbox":[650,398,550,176]}
+{"kind":"textbox","id":"sh/udg7adsj","slide":9,"text":"可审计文件链","textPreview":"可审计文件链","textChars":6,"textLines":1,"bbox":[680,422,490,38]}
+{"kind":"textbox","id":"sh/54zidony","slide":9,"text":"分镜、源码、日志、批注、任务、修订全程留痕","textPreview":"分镜、源码、日志、批注、任务、修订全程留痕","textChars":21,"textLines":1,"bbox":[680,476,490,66]}
+{"kind":"notes","id":"nt/akpyug","slide":9,"text":""}
+{"kind":"slide","id":"sl/3vmbwx","slide":10,"title":"系统测试","textShapes":12}
+{"kind":"textbox","id":"sh/lc7u54zi","slide":10,"text":"系统测试","textPreview":"系统测试","textChars":4,"textLines":1,"bbox":[52,26,340,28]}
+{"kind":"textbox","id":"sh/eloj2t83","slide":10,"text":"10","textPreview":"10","textChars":2,"textLines":1,"bbox":[1170,658,54,28]}
+{"kind":"textbox","id":"sh/36hcrmhk","slide":10,"text":"验证结果：能运行、能定位、能回退","textPreview":"验证结果：能运行、能定位、能回退","textChars":16,"textLines":1,"bbox":[52,60,1120,62]}
+{"kind":"shape","id":"sh/wfyxobm5","slide":10,"bbox":[52,132,72,5]}
+{"kind":"shape","id":"sh/l0rqd4vm","slide":10,"bbox":[52,190,260,302]}
+{"kind":"textbox","id":"sh/ed8bat47","slide":10,"text":"46","textPreview":"46","textChars":2,"textLines":1,"bbox":[72,224,220,96]}
+{"kind":"textbox","id":"sh/7u54zido","slide":10,"text":"项目1后端自动化测试\n全部通过","textPreview":"项目1后端自动化测试 | 全部通过","textChars":15,"textLines":2,"bbox":[78,350,208,94]}
+{"kind":"shape","id":"sh/w7mp0bi9","slide":10,"bbox":[346,190,260,302]}
+{"kind":"textbox","id":"sh/psfil0rq","slide":10,"text":"3","textPreview":"3","textChars":1,"textLines":1,"bbox":[366,224,220,96]}
+{"kind":"textbox","id":"sh/tsvu9kni","slide":10,"text":"渲染失败的\n最大自动修复轮数","textPreview":"渲染失败的 | 最大自动修复轮数","textChars":14,"textLines":2,"bbox":[372,350,208,94]}
+{"kind":"shape","id":"sh/47y1kre1","slide":10,"bbox":[640,190,260,302]}
+{"kind":"textbox","id":"sh/bm58z25k","slide":10,"text":"23 s","textPreview":"23 s","textChars":4,"textLines":1,"bbox":[660,224,220,96]}
+{"kind":"textbox","id":"sh/m1cfa9w3","slide":10,"text":"斜拉桥示例视频\n三个可定位分镜","textPreview":"斜拉桥示例视频 | 三个可定位分镜","textChars":15,"textLines":2,"bbox":[666,350,208,94]}
+{"kind":"shape","id":"sh/tgfmlkjm","slide":10,"bbox":[934,190,260,302]}
+{"kind":"textbox","id":"sh/4vmtwra5","slide":10,"text":"v014","textPreview":"v014","textChars":4,"textLines":1,"bbox":[954,224,220,96]}
+{"kind":"textbox","id":"sh/bat47y1k","slide":10,"text":"示例项目连续审阅\n已承载版本","textPreview":"示例项目连续审阅 | 已承载版本","textChars":14,"textLines":2,"bbox":[960,350,208,94]}
+{"kind":"textbox","id":"sh/mp0bi9s3","slide":10,"text":"项目2完成静态自检、前后端构建、视频接口、批注保存、分镜匹配、任务生成、渲染、修订与回滚验证。","textPreview":"项目2完成静态自检、前后端构建、视频接口、批注保存、分镜匹配、任务生成、渲染、修订与回滚验证。","textChars":47,"textLines":1,"bbox":[92,548,1096,66]}
+{"kind":"notes","id":"nt/3vmbwx","slide":10,"text":""}
+{"kind":"slide","id":"sl/ofahct","slide":11,"title":"创新点","textShapes":12}
+{"kind":"textbox","id":"sh/neloj2t8","slide":11,"text":"创新点","textPreview":"创新点","textChars":3,"textLines":1,"bbox":[52,26,340,28]}
+{"kind":"textbox","id":"sh/czed8v6p","slide":11,"text":"11","textPreview":"11","textChars":2,"textLines":1,"bbox":[1170,658,54,28]}
+{"kind":"textbox","id":"sh/5kb6xkf6","slide":11,"text":"项目特色：不追求“一次生成完美”，而是让修改可控","textPreview":"项目特色：不追求“一次生成完美”，而是让修改可控","textChars":24,"textLines":1,"bbox":[52,60,1120,62]}
+{"kind":"shape","id":"sh/u54zidon","slide":11,"bbox":[52,132,72,5]}
+{"kind":"shape","id":"sh/nqxs72x4","slide":11,"bbox":[52,194,360,380]}
+{"kind":"textbox","id":"sh/cbulwval","slide":11,"text":"01","textPreview":"01","textChars":2,"textLines":1,"bbox":[78,220,80,60]}
+{"kind":"textbox","id":"sh/5sneloj2","slide":11,"text":"双系统闭环","textPreview":"双系统闭环","textChars":5,"textLines":1,"bbox":[78,304,308,70]}
+{"kind":"textbox","id":"sh/y90je9cv","slide":11,"text":"生成端优化首次成片，审阅端优化精细修改。","textPreview":"生成端优化首次成片，审阅端优化精细修改。","textChars":20,"textLines":1,"bbox":[78,398,308,110]}
+{"kind":"shape","id":"sh/nuxc3ylc","slide":11,"bbox":[456,194,360,380]}
+{"kind":"textbox","id":"sh/36hcrmhk","slide":11,"text":"02","textPreview":"02","textChars":2,"textLines":1,"bbox":[482,220,80,60]}
+{"kind":"textbox","id":"sh/eloj2t83","slide":11,"text":"分层视觉设计","textPreview":"分层视觉设计","textChars":6,"textLines":1,"bbox":[482,304,308,70]}
+{"kind":"textbox","id":"sh/lc7u54zi","slide":11,"text":"从教学目标逐层落到分镜、对象和动画代码。","textPreview":"从教学目标逐层落到分镜、对象和动画代码。","textChars":20,"textLines":1,"bbox":[482,398,308,110]}
+{"kind":"shape","id":"sh/wra5gbq1","slide":11,"bbox":[860,194,360,380]}
+{"kind":"textbox","id":"sh/7u54zido","slide":11,"text":"03","textPreview":"03","textChars":2,"textLines":1,"bbox":[886,220,80,60]}
+{"kind":"textbox","id":"sh/ed8bat47","slide":11,"text":"编号批注映射","textPreview":"编号批注映射","textChars":6,"textLines":1,"bbox":[886,304,308,70]}
+{"kind":"textbox","id":"sh/l0rqd4vm","slide":11,"text":"把画面指令映射到 OBJECT_ID 和代码行区间。","textPreview":"把画面指令映射到 OBJECT_ID 和代码行区间。","textChars":26,"textLines":1,"bbox":[886,398,308,110]}
+{"kind":"notes","id":"nt/ofahct","slide":11,"text":""}
+{"kind":"slide","id":"sl/uwu07t","slide":12,"title":"改进路线","textShapes":10}
+{"kind":"textbox","id":"sh/w3m94fu1","slide":12,"text":"改进路线","textPreview":"改进路线","textChars":4,"textLines":1,"bbox":[52,26,340,28]}
+{"kind":"textbox","id":"sh/3itgfmlk","slide":12,"text":"12","textPreview":"12","textChars":2,"textLines":1,"bbox":[1170,658,54,28]}
+{"kind":"textbox","id":"sh/ex0nuxc3","slide":12,"text":"当前边界与下一步","textPreview":"当前边界与下一步","textChars":8,"textLines":1,"bbox":[52,60,1120,62]}
+{"kind":"shape","id":"sh/lwval87e","slide":12,"bbox":[52,132,72,5]}
+{"kind":"textbox","id":"sh/wb2hwfyx","slide":12,"text":"当前能力边界","textPreview":"当前能力边界","textChars":6,"textLines":1,"bbox":[52,174,520,38]}
+{"kind":"textbox","id":"sh/3q5o7qpg","slide":12,"text":"• 未实现荷载组合、内力计算、截面验算与有限元求解\n• 视觉守卫尚不能稳定检出遮挡、越界、空白帧\n• 两项目尚未形成统一资产协议","textPreview":"• 未实现荷载组合、内力计算、截面验算与有限元求解 | • 视觉守卫尚不能稳定检出遮挡、越界、空白帧 | • 两项目尚未形成统一资产协议","textChars":64,"textLines":3,"bbox":[52,230,530,182]}
+{"kind":"shape","id":"sh/e9cvixcz","slide":12,"bbox":[620,170,4,440]}
+{"kind":"textbox","id":"sh/l87ed8ba","slide":12,"text":"优先改进","textPreview":"优先改进","textChars":4,"textLines":1,"bbox":[668,174,520,38]}
+{"kind":"shape","id":"sh/sneloj2t","slide":12,"bbox":[668,236,520,90]}
+{"kind":"textbox","id":"sh/qd4vmtwr","slide":12,"text":"高  统一 project_manifest 与 shot schema","textPreview":"高  统一 project_manifest 与 shot schema","textChars":36,"textLines":1,"bbox":[692,254,474,52]}
+{"kind":"shape","id":"sh/fyxobm58","slide":12,"bbox":[668,344,520,90]}
+{"kind":"textbox","id":"sh/8jqh0fep","slide":12,"text":"高  渲染后抽帧质量检测","textPreview":"高  渲染后抽帧质量检测","textChars":12,"textLines":1,"bbox":[692,362,474,52]}
+{"kind":"shape","id":"sh/x4nap4r6","slide":12,"bbox":[668,452,520,90]}
+{"kind":"textbox","id":"sh/qpg3ex0n","slide":12,"text":"中  接入桥梁计算结果与修订前后差异","textPreview":"中  接入桥梁计算结果与修订前后差异","textChars":18,"textLines":1,"bbox":[692,470,474,52]}
+{"kind":"textbox","id":"sh/fa9w3m94","slide":12,"text":"动画负责组织与表达；结构安全结论仍必须由规范、计算和专业判断共同保证。","textPreview":"动画负责组织与表达；结构安全结论仍必须由规范、计算和专业判断共同保证。","textChars":35,"textLines":1,"bbox":[52,606,1136,40]}
+{"kind":"notes","id":"nt/uwu07t","slide":12,"text":""}
+{"kind":"slide","id":"sl/2thmq5","slide":13,"title":"结论","textShapes":5}
+{"kind":"textbox","id":"sh/vy90je9c","slide":13,"text":"结论","textPreview":"结论","textChars":2,"textLines":1,"bbox":[64,72,240,44]}
+{"kind":"textbox","id":"sh/oj2t83it","slide":13,"text":"真正的成果不只是一段视频，\n而是一条可解释、可复核、可回退的工程表达流程。","textPreview":"真正的成果不只是一段视频， | 而是一条可解释、可复核、可回退的工程表达流程。","textChars":37,"textLines":2,"bbox":[64,168,1110,176]}
+{"kind":"shape","id":"sh/d4vmtwra","slide":13,"bbox":[64,386,120,6]}
+{"kind":"textbox","id":"sh/61032lsz","slide":13,"text":"项目1建立了可执行的生成流水线；项目2建立了可控的交互审阅流水线。","textPreview":"项目1建立了可执行的生成流水线；项目2建立了可控的交互审阅流水线。","textChars":33,"textLines":1,"bbox":[64,426,1020,76]}
+{"kind":"textbox","id":"sh/vmtwra5g","slide":13,"text":"谢谢","textPreview":"谢谢","textChars":2,"textLines":1,"bbox":[64,594,240,58]}
+{"kind":"textbox","id":"sh/o7qpg3ex","slide":13,"text":"桥梁工程课程设计汇报","textPreview":"桥梁工程课程设计汇报","textChars":10,"textLines":1,"bbox":[850,610,360,34]}
+{"kind":"notes","id":"nt/2thmq5","slide":13,"text":""}

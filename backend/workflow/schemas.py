@@ -21,7 +21,7 @@ PortType = Literal[
     "Any",
 ]
 
-NodeStatus = Literal["idle", "running", "success", "failed", "skipped", "stopped"]
+NodeStatus = Literal["idle", "waiting_input", "queued", "running", "success", "failed", "skipped", "stopped"]
 
 
 class PortDefinition(BaseModel):

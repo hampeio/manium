@@ -6,17 +6,20 @@ from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 
-from backend.ai.model_config import resolve_model_config
-from backend.ai.model_router import ModelRouter
+from backend.ai.model_config import ModelRequestConfig, resolve_model_config
+from backend.ai.model_router import ModelRouter, VISION_REQUIRED_MESSAGE
 from backend.ai.prompt_store import apply_prompt_overrides, get_prompt_values, load_prompt_overrides
 from backend.core.config import get_settings
 from backend.core.logging import configure_logging
 from backend.services.generation_service import GenerationService
 from backend.services.annotation_service import AnnotationService
+from backend.services.capability_probe_service import CapabilityProbeService
+from backend.services.configuration_service import ConfigurationService
 from backend.services.project_manager import ProjectManager
 from backend.services.task_registry import TaskRegistry
+from backend.services.style_library_service import StyleLibraryService
 from backend.workflow.executor import WorkflowExecutor
-from backend.workflow.node_registry import list_node_definitions
+from backend.workflow.node_registry import list_node_definitions, register_custom_node
 from backend.workflow.schemas import WorkflowGraph
 from backend.workflow.templates import get_template, list_templates
 from backend.workflow.validator import validate_workflow
@@ -44,14 +47,150 @@ app.add_middleware(
 
 project_manager = ProjectManager(settings.generated_projects_dir)
 generation_service = GenerationService(settings, project_manager)
-task_registry = TaskRegistry()
+task_registry = TaskRegistry(settings.generated_projects_dir)
 workflow_executor = WorkflowExecutor(generation_service, project_manager)
 annotation_service = AnnotationService()
+configuration_service = ConfigurationService(settings)
+capability_probe_service = CapabilityProbeService()
+style_library_service = StyleLibraryService(settings.configuration_dir / "style_library")
+
+
+def _resolve_request_model(
+    model_profile_id: str,
+    provider: str,
+    api_key: str,
+    base_url: str,
+    model: str,
+) -> ModelRequestConfig:
+    if model_profile_id:
+        return ModelRequestConfig.from_profile(configuration_service.get_model_profile(model_profile_id))
+    return resolve_model_config(settings, provider or None, api_key or None, base_url or None, model or None)
+
+
+def _require_image_capability(config: ModelRequestConfig, has_image: bool) -> None:
+    if not has_image:
+        return
+    capabilities = config.capabilities.normalize()
+    if not (capabilities.vision and capabilities.image_upload and capabilities.multimodal_input):
+        raise HTTPException(status_code=400, detail=VISION_REQUIRED_MESSAGE)
 
 
 @app.get("/health")
 def health() -> dict[str, str]:
     return {"status": "ok", "app": settings.app_name}
+
+
+@app.get("/configurations")
+def configurations_export(include_secrets: bool = False) -> dict[str, object]:
+    return configuration_service.export_data(include_secrets=include_secrets)
+
+
+@app.post("/configurations/import")
+def configurations_import(payload: dict[str, object]) -> dict[str, object]:
+    try:
+        return configuration_service.import_data(payload)
+    except (ValueError, TypeError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.get("/model-configs")
+def model_configs() -> dict[str, object]:
+    return configuration_service.list_model_profiles()
+
+
+@app.post("/model-configs")
+def model_configs_save(payload: dict[str, object]) -> dict[str, object]:
+    try:
+        profile = configuration_service.save_model_profile(payload)
+        return {"profile": profile.public_dict(), **configuration_service.list_model_profiles()}
+    except (ValueError, TypeError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.delete("/model-configs/{profile_id}")
+def model_configs_delete(profile_id: str) -> dict[str, object]:
+    try:
+        configuration_service.delete_model_profile(profile_id)
+        return configuration_service.list_model_profiles()
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.post("/model-configs/{profile_id}/default")
+def model_configs_default(profile_id: str) -> dict[str, object]:
+    try:
+        profile = configuration_service.set_default_model(profile_id)
+        return {"profile": profile.public_dict(), **configuration_service.list_model_profiles()}
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@app.post("/model-configs/{profile_id}/probe")
+async def model_configs_probe(profile_id: str) -> dict[str, object]:
+    try:
+        profile = configuration_service.get_model_profile(profile_id)
+        capabilities, probe = await capability_probe_service.probe(profile)
+        profile.capabilities = capabilities
+        profile.capability_source = "probe"
+        profile.probe = probe
+        saved = configuration_service.save_model_profile(profile.model_dump())
+        return {"profile": saved.public_dict()}
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@app.get("/model-configs/{profile_id}/capabilities")
+def model_capabilities(profile_id: str) -> dict[str, object]:
+    try:
+        profile = configuration_service.get_model_profile(profile_id)
+        return {"profile_id": profile.id, "capabilities": profile.capabilities.model_dump(), "probe": profile.probe.model_dump()}
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@app.get("/audio-configs")
+def audio_configs() -> dict[str, object]:
+    return configuration_service.list_audio_profiles()
+
+
+@app.post("/audio-configs")
+def audio_configs_save(payload: dict[str, object]) -> dict[str, object]:
+    try:
+        profile = configuration_service.save_audio_profile(payload)
+        return {"profile": profile.public_dict(), **configuration_service.list_audio_profiles()}
+    except (ValueError, TypeError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.delete("/audio-configs/{profile_id}")
+def audio_configs_delete(profile_id: str) -> dict[str, object]:
+    try:
+        configuration_service.delete_audio_profile(profile_id)
+        return configuration_service.list_audio_profiles()
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.post("/audio-configs/{profile_id}/default")
+def audio_configs_default(profile_id: str) -> dict[str, object]:
+    try:
+        profile = configuration_service.set_default_audio(profile_id)
+        return {"profile": profile.public_dict(), **configuration_service.list_audio_profiles()}
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@app.post("/audio-configs/{profile_id}/test")
+async def audio_configs_test(profile_id: str) -> dict[str, object]:
+    try:
+        profile = configuration_service.get_audio_profile(profile_id)
+        if not profile:
+            raise ValueError("找不到音频配置。")
+        output = settings.configuration_dir / "audio_tests" / f"{profile.id}.audio"
+        result = await asyncio.to_thread(generation_service.tts_service.test_audio_profile, profile, output)
+        return {"success": result.status == "success", "status": result.status, "message": result.message, "error": result.error}
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
 
 
 @app.get("/prompts")
@@ -67,9 +206,88 @@ async def prompts_post(payload: dict[str, object]) -> dict[str, object]:
     return {"prompts": apply_prompt_overrides(values)}
 
 
+@app.get("/style-library")
+def style_library_list() -> dict[str, object]:
+    return style_library_service.list_styles()
+
+
+@app.get("/style-library/{style_id}")
+def style_library_get(style_id: str, version: int | None = None) -> dict[str, object]:
+    try:
+        return style_library_service.get_style(style_id, version)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@app.post("/style-library/analyze")
+async def style_library_analyze(
+    files: list[UploadFile] = File(...),
+    style_name: str = Form(default=""),
+    description: str = Form(default=""),
+    existing_style_id: str = Form(default=""),
+    model_profile_id: str = Form(default=""),
+    use_ai: bool = Form(default=True),
+) -> dict[str, object]:
+    try:
+        payload = [(item.filename or "unnamed", await item.read()) for item in files]
+        style = style_library_service.analyze(
+            style_name=style_name.strip(),
+            description=description.strip(),
+            existing_style_id=existing_style_id.strip(),
+            files=payload,
+        )
+        if not use_ai:
+            return style
+        profile = configuration_service.get_model_profile(model_profile_id.strip() or None)
+        model_config = ModelRequestConfig.from_profile(profile)
+        image_path: Path | None = None
+        image_item = next(
+            ((name, data) for name, data in payload if Path(name).suffix.lower() in {".png", ".jpg", ".jpeg", ".webp"}),
+            None,
+        )
+        if image_item and model_config.capabilities.normalize().vision:
+            image_dir = settings.configuration_dir / "style_library" / "_model_inputs"
+            image_dir.mkdir(parents=True, exist_ok=True)
+            image_path = image_dir / f"{style['id']}{Path(image_item[0]).suffix.lower()}"
+            image_path.write_bytes(image_item[1])
+        try:
+            router = ModelRouter(model_config, trace_dir=settings.configuration_dir / "style_library" / "ai_traces")
+            result = await router.analyze_manim_style(style["analysis"], image_path)
+            return style_library_service.apply_model_analysis(style["id"], result, model_config.model)
+        except Exception as exc:
+            return style_library_service.mark_model_fallback(style["id"], str(exc), model_config.model)
+        finally:
+            if image_path and image_path.exists():
+                image_path.unlink()
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.put("/style-library/{style_id}")
+def style_library_update(style_id: str, payload: dict[str, object]) -> dict[str, object]:
+    try:
+        return style_library_service.save_preset(style_id, payload)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@app.post("/style-library/{style_id}/rollback/{version}")
+def style_library_rollback(style_id: str, version: int) -> dict[str, object]:
+    try:
+        return style_library_service.rollback(style_id, version)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@app.post("/style-library/import")
+def style_library_import(payload: dict[str, object]) -> dict[str, object]:
+    return style_library_service.import_style(payload)
+
+
 @app.post("/generate")
 async def generate(
     prompt: str = Form(default=""),
+    model_profile_id: str = Form(default=""),
     provider: str = Form(default=""),
     api_key: str = Form(default=""),
     base_url: str = Form(default=""),
@@ -81,10 +299,11 @@ async def generate(
     output_dir: str = Form(default=""),
     image: UploadFile | None = File(default=None),
 ) -> dict[str, object]:
+    model_config = _resolve_request_model(model_profile_id, provider, api_key, base_url, model)
+    _require_image_capability(model_config, image is not None and bool(image.filename))
     active_manager = ProjectManager(Path(output_dir)) if output_dir else project_manager
     project_dir = active_manager.create_project()
     image_path = await active_manager.save_upload(project_dir, image)
-    model_config = resolve_model_config(settings, provider or None, api_key or None, base_url or None, model or None)
     try:
         return await generation_service.run(
             project_dir=project_dir,
@@ -104,6 +323,7 @@ async def generate(
 @app.post("/generate_async")
 async def generate_async(
     prompt: str = Form(default=""),
+    model_profile_id: str = Form(default=""),
     provider: str = Form(default=""),
     api_key: str = Form(default=""),
     base_url: str = Form(default=""),
@@ -115,10 +335,11 @@ async def generate_async(
     output_dir: str = Form(default=""),
     image: UploadFile | None = File(default=None),
 ) -> dict[str, object]:
+    model_config = _resolve_request_model(model_profile_id, provider, api_key, base_url, model)
+    _require_image_capability(model_config, image is not None and bool(image.filename))
     active_manager = ProjectManager(Path(output_dir)) if output_dir else project_manager
     project_dir = active_manager.create_project()
     image_path = await active_manager.save_upload(project_dir, image)
-    model_config = resolve_model_config(settings, provider or None, api_key or None, base_url or None, model or None)
     task = task_registry.create(str(project_dir.resolve()))
 
     async def run_job() -> None:
@@ -150,6 +371,7 @@ async def generate_async(
 async def regenerate_async(
     source_project_dir: str = Form(default=""),
     edit_prompt: str = Form(default=""),
+    model_profile_id: str = Form(default=""),
     provider: str = Form(default=""),
     api_key: str = Form(default=""),
     base_url: str = Form(default=""),
@@ -175,7 +397,7 @@ async def regenerate_async(
     project_dir = active_manager.create_project()
     active_manager.write_text(project_dir, "inputs/source_project_dir.txt", str(source_dir))
     active_manager.write_text(project_dir, "inputs/edit_prompt.txt", edit_prompt or "")
-    model_config = resolve_model_config(settings, provider or None, api_key or None, base_url or None, model or None)
+    model_config = _resolve_request_model(model_profile_id, provider, api_key, base_url, model)
     task = task_registry.create(str(project_dir.resolve()))
 
     async def run_job() -> None:
@@ -208,18 +430,22 @@ async def replace_segment_async(
     source_project_dir: str = Form(default=""),
     segment_id: str = Form(default=""),
     edit_prompt: str = Form(default=""),
+    model_profile_id: str = Form(default=""),
     provider: str = Form(default=""),
     api_key: str = Form(default=""),
     base_url: str = Form(default=""),
     model: str = Form(default=""),
     quality: str = Form(default="preview_720p"),
+    use_project_image: bool = Form(default=False),
 ) -> dict[str, object]:
     source_dir = Path(source_project_dir).resolve()
     if not source_dir.exists() or not source_dir.is_dir():
         raise HTTPException(status_code=404, detail="找不到源项目。")
     if not segment_id:
         raise HTTPException(status_code=400, detail="必须指定要修改的片段。")
-    model_config = resolve_model_config(settings, provider or None, api_key or None, base_url or None, model or None)
+    model_config = _resolve_request_model(model_profile_id, provider, api_key, base_url, model)
+    reference_image = next(source_dir.glob("inputs/uploaded_image.*"), None) if use_project_image else None
+    _require_image_capability(model_config, reference_image is not None)
     task = task_registry.create(str(source_dir))
 
     async def run_job() -> None:
@@ -231,6 +457,55 @@ async def replace_segment_async(
                 edit_prompt=edit_prompt,
                 model_router=ModelRouter(model_config, trace_dir=source_dir / "ai_traces"),
                 quality=quality,
+                reference_image=reference_image,
+                progress=lambda message: task_registry.log(task.task_id, message),
+                partial_update=lambda partial: task_registry.update_partial(task.task_id, partial),
+            )
+            task_registry.complete(task.task_id, result)
+        except Exception as exc:
+            task_registry.fail(task.task_id, str(exc))
+
+    asyncio.create_task(run_job())
+    return {"task_id": task.task_id, "project_dir": str(source_dir), "state": "queued"}
+
+
+@app.get("/project/segment-code")
+def project_segment_code(project_dir: str, segment_id: str) -> dict[str, object]:
+    source_dir = Path(project_dir).resolve()
+    if not source_dir.exists() or not source_dir.is_dir():
+        raise HTTPException(status_code=404, detail="找不到项目。")
+    try:
+        return generation_service.get_segment_code_info(project_dir=source_dir, segment_id=segment_id)
+    except (FileNotFoundError, ValueError) as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@app.post("/render_segment_code_async")
+async def render_segment_code_async(
+    project_dir: str = Form(default=""),
+    segment_id: str = Form(default=""),
+    manim_code: str = Form(default=""),
+    quality: str = Form(default="preview_720p"),
+    timing_policy: str = Form(default="auto_audio"),
+    manual_duration: float = Form(default=0),
+) -> dict[str, object]:
+    source_dir = Path(project_dir).resolve()
+    if not source_dir.exists() or not source_dir.is_dir():
+        raise HTTPException(status_code=404, detail="找不到项目。")
+    if not segment_id or not manim_code.strip():
+        raise HTTPException(status_code=400, detail="必须选择片段并提供 Manim 代码。")
+    task = task_registry.create(str(source_dir))
+
+    async def run_job() -> None:
+        task_registry.start(task.task_id)
+        try:
+            result = await generation_service.render_segment_code(
+                project_dir=source_dir,
+                segment_id=segment_id,
+                manim_code=manim_code,
+                quality=quality,
+                timing_policy=timing_policy,
+                manual_duration=manual_duration or None,
                 progress=lambda message: task_registry.log(task.task_id, message),
                 partial_update=lambda partial: task_registry.update_partial(task.task_id, partial),
             )
@@ -274,6 +549,11 @@ def get_task(task_id: str) -> dict[str, object]:
     return task
 
 
+@app.get("/tasks")
+def list_tasks() -> dict[str, object]:
+    return {"tasks": task_registry.list_dicts()}
+
+
 @app.post("/tasks/{task_id}/pause")
 def pause_task(task_id: str) -> dict[str, object]:
     if not task_registry.pause(task_id):
@@ -291,6 +571,25 @@ def resume_task(task_id: str) -> dict[str, object]:
 @app.get("/workflow/node-definitions")
 def workflow_node_definitions() -> dict[str, object]:
     return {"nodes": [definition.model_dump() for definition in list_node_definitions()]}
+
+
+@app.post("/workflow/custom-nodes")
+async def workflow_upload_custom_node(file: UploadFile = File(...)) -> dict[str, object]:
+    if not file.filename or not file.filename.lower().endswith(".json"):
+        raise HTTPException(status_code=400, detail="自定义节点必须是 JSON 文件。")
+    raw = await file.read()
+    if len(raw) > 1024 * 1024:
+        raise HTTPException(status_code=400, detail="节点配置文件不能超过 1MB。")
+    try:
+        payload = json.loads(raw.decode("utf-8-sig"))
+        if not isinstance(payload, dict):
+            raise ValueError("节点配置根对象必须是 JSON 对象。")
+        definition = register_custom_node(payload)
+    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise HTTPException(status_code=400, detail=f"JSON 无法解析：{exc}") from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return {"message": "自定义节点已加入节点库。", "node": definition.model_dump()}
 
 
 @app.get("/workflow/templates")
@@ -314,6 +613,7 @@ async def workflow_validate(workflow: WorkflowGraph) -> dict[str, object]:
 @app.post("/workflow/run_async")
 async def workflow_run_async(
     workflow: WorkflowGraph,
+    model_profile_id: str = "",
     provider: str = "",
     api_key: str = "",
     base_url: str = "",
@@ -321,10 +621,12 @@ async def workflow_run_async(
     quality: str = "low",
     output_dir: str = "",
 ) -> dict[str, object]:
+    model_config = _resolve_request_model(model_profile_id, provider, api_key, base_url, model)
+    uses_image_nodes = any(node.type in {"InputImageNode", "ImagePreprocessNode", "ImageUnderstandNode"} for node in workflow.nodes)
+    _require_image_capability(model_config, uses_image_nodes)
     active_manager = ProjectManager(Path(output_dir)) if output_dir else project_manager
     project_dir = active_manager.create_project()
-    model_config = resolve_model_config(settings, provider or None, api_key or None, base_url or None, model or None)
-    task = task_registry.create()
+    task = task_registry.create(str(project_dir.resolve()))
 
     async def run_job() -> None:
         task_registry.start(task.task_id)
@@ -369,8 +671,14 @@ def project_annotations(project_dir: str) -> dict[str, object]:
 @app.post("/project/annotations")
 def create_project_annotation(payload: dict[str, object]) -> dict[str, object]:
     project_dir = str(payload.pop("project_dir", ""))
+    model_profile_id = str(payload.pop("model_profile_id", ""))
     if not project_dir:
         raise HTTPException(status_code=400, detail="project_dir is required.")
+    shape_data = payload.get("shape_data") if isinstance(payload.get("shape_data"), dict) else {}
+    if shape_data.get("target_kind") == "image":
+        profile = configuration_service.get_model_profile(model_profile_id or None)
+        if not profile.capabilities.normalize().image_annotation:
+            raise HTTPException(status_code=400, detail=VISION_REQUIRED_MESSAGE)
     try:
         annotation = annotation_service.create(Path(project_dir), payload)
     except FileNotFoundError as exc:
@@ -383,8 +691,14 @@ def create_project_annotation(payload: dict[str, object]) -> dict[str, object]:
 @app.put("/project/annotations/{annotation_id}")
 def update_project_annotation(annotation_id: str, payload: dict[str, object]) -> dict[str, object]:
     project_dir = str(payload.pop("project_dir", ""))
+    model_profile_id = str(payload.pop("model_profile_id", ""))
     if not project_dir:
         raise HTTPException(status_code=400, detail="project_dir is required.")
+    shape_data = payload.get("shape_data") if isinstance(payload.get("shape_data"), dict) else {}
+    if shape_data.get("target_kind") == "image":
+        profile = configuration_service.get_model_profile(model_profile_id or None)
+        if not profile.capabilities.normalize().image_annotation:
+            raise HTTPException(status_code=400, detail=VISION_REQUIRED_MESSAGE)
     try:
         annotation = annotation_service.update(Path(project_dir), annotation_id, payload)
     except FileNotFoundError as exc:

@@ -25,6 +25,8 @@ class SegmentMediaService:
         narration_text: str,
         revision: int,
         previous: dict[str, object] | None = None,
+        timing_policy: str = "auto_audio",
+        manual_duration: float | None = None,
     ) -> dict[str, object]:
         safe_id = self._safe_id(segment_id)
         video_dir = project_dir / "outputs" / "segments"
@@ -36,8 +38,9 @@ class SegmentMediaService:
 
         video_path = video_dir / f"{safe_id}_v{revision:03d}.mp4"
         shutil.copy2(rendered_video, video_path)
-        video_duration = self.probe_duration(video_path)
-        if video_duration <= 0:
+        rendered_video_duration = self.probe_duration(video_path)
+        video_duration = rendered_video_duration
+        if rendered_video_duration <= 0:
             raise RuntimeError(f"Cannot determine video duration for {segment_id}.")
 
         source_audio = self._source_audio(
@@ -47,36 +50,53 @@ class SegmentMediaService:
             narration_text=narration_text,
             previous=previous,
         )
-        audio_path = audio_dir / f"{safe_id}_v{revision:03d}.wav"
+        audio_path: Path | None = audio_dir / f"{safe_id}_v{revision:03d}.wav" if source_audio else None
         timing_adjustment = "none"
+        source_audio_duration = 0.0
         if source_audio and source_audio.exists():
-            audio_duration = self.probe_duration(source_audio)
-            if audio_duration > video_duration + self.tolerance_seconds:
-                self._extend_video(video_path, audio_duration - video_duration)
-                video_duration = self.probe_duration(video_path)
-                timing_adjustment = "video_extended_to_audio"
-            elif audio_duration < video_duration - self.tolerance_seconds:
-                timing_adjustment = "audio_padded_to_video"
-            final_duration = max(video_duration, audio_duration)
+            source_audio_duration = self.probe_duration(source_audio)
+            if timing_policy == "manual":
+                if not manual_duration or manual_duration <= 0:
+                    raise ValueError("手动时长必须大于 0 秒。")
+                final_duration = float(manual_duration)
+                self._fit_video_duration(video_path, video_duration, final_duration)
+                timing_adjustment = "manual_duration"
+            elif timing_policy == "keep_video":
+                final_duration = video_duration
+                timing_adjustment = "kept_manim_duration"
+            else:
+                final_duration = max(video_duration, source_audio_duration)
+                if source_audio_duration > video_duration + self.tolerance_seconds:
+                    self._extend_video(video_path, source_audio_duration - video_duration)
+                    timing_adjustment = "video_extended_to_audio"
+                elif source_audio_duration < video_duration - self.tolerance_seconds:
+                    timing_adjustment = "audio_padded_to_video"
+            assert audio_path is not None
             self._normalize_audio(source_audio, audio_path, final_duration)
         else:
-            final_duration = video_duration
-            self._create_silence(audio_path, final_duration)
-            timing_adjustment = "silent_audio_created"
+            final_duration = float(manual_duration) if timing_policy == "manual" and manual_duration else video_duration
+            if abs(final_duration - video_duration) > self.tolerance_seconds:
+                self._fit_video_duration(video_path, video_duration, final_duration)
+                timing_adjustment = "manual_duration"
+            if timing_adjustment == "none":
+                timing_adjustment = "audio_skipped_not_configured"
 
         final_video_duration = self.probe_duration(video_path)
-        final_audio_duration = self.probe_duration(audio_path)
+        final_audio_duration = self.probe_duration(audio_path) if audio_path else 0.0
         final_duration = max(final_video_duration, final_audio_duration)
         if final_video_duration < final_duration - self.tolerance_seconds:
             self._extend_video(video_path, final_duration - final_video_duration)
-        if final_audio_duration < final_duration - self.tolerance_seconds:
+        if audio_path and final_audio_duration < final_duration - self.tolerance_seconds:
             self._normalize_audio(audio_path, audio_path.with_suffix(".aligned.wav"), final_duration)
             audio_path.with_suffix(".aligned.wav").replace(audio_path)
 
         subtitle_path = subtitle_dir / f"{safe_id}_v{revision:03d}.srt"
         subtitle_path.write_text(self._segment_srt(narration_text, final_duration), encoding="utf-8")
         preview_path = preview_dir / f"{safe_id}_v{revision:03d}.mp4"
-        self._mux_preview(video_path, audio_path, preview_path, final_duration)
+        if audio_path:
+            self._mux_preview(video_path, audio_path, preview_path, final_duration)
+        else:
+            shutil.copy2(video_path, preview_path)
         now = datetime.now(timezone.utc).isoformat()
         original_video = (previous or {}).get("original_video_path") or str(video_path.resolve())
         original_preview = (previous or {}).get("original_preview_path") or str(preview_path.resolve())
@@ -95,7 +115,7 @@ class SegmentMediaService:
             )
         return {
             "video_path": str(video_path.resolve()),
-            "audio_path": str(audio_path.resolve()),
+            "audio_path": str(audio_path.resolve()) if audio_path else None,
             "audio_source_path": str(source_audio.resolve()) if source_audio else None,
             "subtitle_path": str(subtitle_path.resolve()),
             "preview_video_path": str(preview_path.resolve()),
@@ -104,6 +124,11 @@ class SegmentMediaService:
             "corrected_video_path": str(video_path.resolve()) if revision > 1 else None,
             "corrected_preview_path": str(preview_path.resolve()) if revision > 1 else None,
             "duration": round(final_duration, 3),
+            "manim_video_duration": round(rendered_video_duration, 3),
+            "audio_duration": round(source_audio_duration, 3),
+            "duration_aligned": not audio_path or abs(final_video_duration - final_audio_duration) <= self.tolerance_seconds,
+            "needs_audio_stretch": source_audio_duration > 0 and abs(rendered_video_duration - source_audio_duration) > self.tolerance_seconds,
+            "timing_policy": timing_policy,
             "narration_text": narration_text,
             "revision": revision,
             "revision_history": history,
@@ -238,7 +263,9 @@ class SegmentMediaService:
         narration_text: str,
         previous: dict[str, object] | None,
     ) -> Path | None:
-        previous_source = Path(str((previous or {}).get("audio_source_path") or ""))
+        previous_source = Path(
+            str((previous or {}).get("audio_source_path") or (previous or {}).get("audio_path") or "")
+        )
         previous_text = str((previous or {}).get("narration_text") or (previous or {}).get("narration") or "")
         if previous_source.exists() and previous_text == narration_text:
             return previous_source
@@ -247,7 +274,7 @@ class SegmentMediaService:
         source = audio_dir / f"{safe_id}_v{revision:03d}_source.mp3"
         result = self.tts_service.synthesize_segment_audio(narration_text, source)
         if not result.audio_path:
-            raise RuntimeError(result.error or "Segment narration synthesis failed.")
+            return None
         return result.audio_path
 
     def _normalize_audio(self, source: Path, output: Path, duration: float) -> None:
@@ -265,6 +292,23 @@ class SegmentMediaService:
                 self._ffmpeg_exe(), "-y", "-i", str(video_path),
                 "-vf", f"tpad=stop_mode=clone:stop_duration={max(0.0, extension):.3f}",
                 "-an", "-c:v", "libx264", "-pix_fmt", "yuv420p", str(temporary),
+            ]
+        )
+        temporary.replace(video_path)
+
+    def _fit_video_duration(self, video_path: Path, current: float, target: float) -> None:
+        if target <= 0 or abs(current - target) <= self.tolerance_seconds:
+            return
+        if current < target:
+            self._extend_video(video_path, target - current)
+            return
+        temporary = video_path.with_name(f"{video_path.stem}.retimed.mp4")
+        ratio = target / current
+        self._run(
+            [
+                self._ffmpeg_exe(), "-y", "-i", str(video_path),
+                "-vf", f"setpts={ratio:.8f}*PTS", "-an", "-c:v", "libx264",
+                "-pix_fmt", "yuv420p", "-t", f"{target:.3f}", str(temporary),
             ]
         )
         temporary.replace(video_path)

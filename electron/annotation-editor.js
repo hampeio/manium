@@ -1,5 +1,5 @@
 (() => {
-  const API_BASE = "http://127.0.0.1:8765";
+  const API_BASE = window.desktopApi?.apiBase || "http://127.0.0.1:8765";
   const canvas = document.getElementById("annotationCanvas");
   const stage = document.getElementById("annotationStage");
   const video = document.getElementById("videoPlayer");
@@ -31,6 +31,8 @@
   let pointerAction = null;
   let selectedDirty = false;
   let imageObjectUrl = "";
+  let modelCapabilities = {};
+  let modelProfileId = "";
 
   function escapeHtml(value) {
     return String(value ?? "")
@@ -360,6 +362,7 @@
     const isSegment = annotationType === "segment";
     const segmentEnd = Number.isFinite(video.duration) ? video.duration : time;
     return {
+      model_profile_id: modelProfileId,
       type: annotationType,
       segment_id: selectedSegmentId && selectedSegmentId !== "final" ? selectedSegmentId : "",
       time_start: currentTargetKind() === "video" ? (isSegment ? 0 : time) : null,
@@ -385,9 +388,12 @@
 
   async function saveCurrent() {
     if (!projectDir) throw new Error("当前项目路径不可用。");
+    if (currentTargetKind() === "image" && !modelCapabilities.image_annotation) {
+      throw new Error("当前所选模型不支持图片理解（Vision）能力，请切换至支持读图的模型后再使用该功能。");
+    }
     const selected = selectedAnnotation();
     if (selected && !draftShapes.length) {
-      const payload = { ...selected, project_dir: projectDir, text_note: noteInput.value.trim() };
+      const payload = { ...selected, project_dir: projectDir, model_profile_id: modelProfileId, text_note: noteInput.value.trim() };
       const result = await request(`${API_BASE}/project/annotations/${encodeURIComponent(selected.id)}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
@@ -522,6 +528,10 @@
   }
 
   function setImagePreview(file) {
+    if (file && !(modelCapabilities.vision && modelCapabilities.image_upload && modelCapabilities.multimodal_input && modelCapabilities.image_annotation)) {
+      setStatus("当前所选模型不支持图片理解（Vision）能力，请切换至支持读图的模型后再使用该功能。");
+      return false;
+    }
     if (imageObjectUrl) URL.revokeObjectURL(imageObjectUrl);
     if (!file) {
       imageObjectUrl = "";
@@ -537,6 +547,13 @@
     }
     updateBindingLabel();
     draw();
+    return true;
+  }
+
+  function setCapabilities(capabilities = {}, profileId = "") {
+    modelCapabilities = capabilities || {};
+    modelProfileId = profileId || "";
+    if (!modelCapabilities.image_annotation && currentTargetKind() === "image") showVideo();
   }
 
   function showVideo() {
@@ -606,6 +623,7 @@
     setProject,
     setSelectedSegment,
     setImagePreview,
+    setCapabilities,
     showVideo,
     saveCurrent,
     ensureSegmentAnnotation: async (text) => {

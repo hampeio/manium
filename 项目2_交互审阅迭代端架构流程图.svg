@@ -1,0 +1,47 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="1000" viewBox="0 0 1600 1000">
+  <defs>
+    <style>
+      .title{font:700 38px 'Microsoft YaHei',sans-serif;fill:#182433}.sub{font:22px 'Microsoft YaHei',sans-serif;fill:#52606d}
+      .h{font:700 24px 'Microsoft YaHei',sans-serif;fill:#17324d}.t{font:19px 'Microsoft YaHei',sans-serif;fill:#263746}
+      .small{font:17px 'Microsoft YaHei',sans-serif;fill:#52606d}.box{fill:#f5f8fa;stroke:#66839b;stroke-width:2.4}
+      .core{fill:#e8f1f6;stroke:#32678e;stroke-width:2.6}.data{fill:#f4f1e9;stroke:#8c7a4e;stroke-width:2.2}
+      .agent{fill:#edf4f0;stroke:#4f7b67;stroke-width:2.4}.arrow{stroke:#c58a22;stroke-width:4;fill:none;marker-end:url(#a)}
+      .back{stroke:#758b9a;stroke-width:3;stroke-dasharray:10 8;fill:none;marker-end:url(#g)}
+    </style>
+    <marker id="a" markerWidth="12" markerHeight="12" refX="10" refY="5" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#c58a22"/></marker>
+    <marker id="g" markerWidth="12" markerHeight="12" refX="10" refY="5" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#758b9a"/></marker>
+  </defs>
+  <rect width="1600" height="1000" fill="#fff"/><rect x="35" y="30" width="1530" height="930" rx="28" fill="#fbfcfd" stroke="#d4dde4" stroke-width="3"/>
+  <text x="800" y="85" text-anchor="middle" class="title">项目2：Manim 视频交互审阅与局部迭代端</text>
+  <text x="800" y="122" text-anchor="middle" class="sub">从视频批注、分镜定位到 Agent 局部修订与版本回滚</text>
+
+  <rect class="data" x="80" y="185" width="265" height="130" rx="18"/><text x="213" y="222" text-anchor="middle" class="h">项目1资产输入</text>
+  <text x="213" y="260" text-anchor="middle" class="t">full_video.mp4</text><text x="213" y="290" text-anchor="middle" class="small">shot_map + source</text>
+  <rect class="box" x="410" y="185" width="265" height="130" rx="18"/><text x="543" y="222" text-anchor="middle" class="h">视频审阅界面</text>
+  <text x="543" y="260" text-anchor="middle" class="t">播放、暂停、时间轴</text><text x="543" y="290" text-anchor="middle" class="small">React + Canvas</text>
+  <rect class="box" x="740" y="185" width="265" height="130" rx="18"/><text x="873" y="222" text-anchor="middle" class="h">编号视觉批注</text>
+  <text x="873" y="260" text-anchor="middle" class="t">矩形 / 箭头 / 画笔</text><text x="873" y="290" text-anchor="middle" class="small">全局要求 + 局部标签</text>
+  <rect class="core" x="1070" y="185" width="265" height="130" rx="18"/><text x="1203" y="222" text-anchor="middle" class="h">时间分镜匹配</text>
+  <text x="1203" y="260" text-anchor="middle" class="t">start ≤ video_time ≤ end</text><text x="1203" y="290" text-anchor="middle" class="small">定位 shot_id 与 Scene</text>
+  <path class="arrow" d="M345 250 H405"/><path class="arrow" d="M675 250 H735"/><path class="arrow" d="M1005 250 H1065"/>
+
+  <rect class="core" x="1070" y="415" width="265" height="135" rx="18"/><text x="1203" y="453" text-anchor="middle" class="h">上下文包</text>
+  <text x="1203" y="490" text-anchor="middle" class="t">截图、对象、代码行区间</text><text x="1203" y="522" text-anchor="middle" class="small">context_{event}.json</text>
+  <rect class="core" x="740" y="415" width="265" height="135" rx="18"/><text x="873" y="453" text-anchor="middle" class="h">Agent Task</text>
+  <text x="873" y="490" text-anchor="middle" class="t">修改规则 + 渲染命令</text><text x="873" y="522" text-anchor="middle" class="small">task_{event}.md</text>
+  <rect class="agent" x="410" y="415" width="265" height="135" rx="18"/><text x="543" y="453" text-anchor="middle" class="h">Codex / Agent 局部修改</text>
+  <text x="543" y="490" text-anchor="middle" class="t">仅修目标 Scene</text><text x="543" y="522" text-anchor="middle" class="small">保留 SHOT_ID / OBJECT_ID</text>
+  <rect class="core" x="80" y="415" width="265" height="135" rx="18"/><text x="213" y="453" text-anchor="middle" class="h">标准完成流程</text>
+  <text x="213" y="490" text-anchor="middle" class="t">局部渲染 + 预览刷新</text><text x="213" y="522" text-anchor="middle" class="small">finalize_agent_patch.py</text>
+  <path class="arrow" d="M1203 315 V410"/><path class="arrow" d="M1070 482 H1010"/><path class="arrow" d="M740 482 H680"/><path class="arrow" d="M410 482 H350"/>
+
+  <rect class="data" x="145" y="675" width="300" height="130" rx="18"/><text x="295" y="713" text-anchor="middle" class="h">修订记录</text>
+  <text x="295" y="750" text-anchor="middle" class="t">revision.json</text><text x="295" y="780" text-anchor="middle" class="small">修改文件、摘要、渲染状态</text>
+  <rect class="data" x="650" y="675" width="300" height="130" rx="18"/><text x="800" y="713" text-anchor="middle" class="h">用户验收</text>
+  <text x="800" y="750" text-anchor="middle" class="t">接受修订 / 继续批注</text><text x="800" y="780" text-anchor="middle" class="small">视频自动刷新并防止批注丢失</text>
+  <rect class="data" x="1155" y="675" width="300" height="130" rx="18"/><text x="1305" y="713" text-anchor="middle" class="h">版本与回滚</text>
+  <text x="1305" y="750" text-anchor="middle" class="t">versions/vNNN</text><text x="1305" y="780" text-anchor="middle" class="small">失败或否决时恢复上一版</text>
+  <path class="arrow" d="M213 550 V615 H295 V670"/><path class="arrow" d="M445 740 H645"/><path class="arrow" d="M950 740 H1150"/>
+  <path class="back" d="M1305 670 V610 H1480 V350 H543 V320"/>
+  <text x="800" y="885" text-anchor="middle" class="sub">工程意义：将“这里的桥梁表达不清楚”转换为可定位、可渲染、可验证、可回退的局部修订</text>
+</svg>

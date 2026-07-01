@@ -1,0 +1,53 @@
+flowchart LR
+    I["项目1输出资产<br/>视频、shot_map、Manim 源码"]
+
+    subgraph REVIEW["交互审阅层：React + Canvas"]
+        direction TB
+        V["视频播放与时间轴"]
+        N["编号批注<br/>矩形、箭头、画笔、局部标签"]
+        U["全局修改要求"]
+    end
+
+    subgraph CONTEXT["任务定位层：FastAPI + 文件工作流"]
+        direction TB
+        S["按 video_time 匹配 shot_id"]
+        C["生成上下文包<br/>截图、对象、代码区间"]
+        T["生成 Agent Task<br/>修改边界、渲染命令、回滚命令"]
+    end
+
+    subgraph PATCH["Agent 局部修订层"]
+        direction TB
+        A["仅修改目标 Scene"]
+        K["保留 SHOT_ID 与 OBJECT_ID"]
+        R["局部重渲染与完整预览刷新"]
+    end
+
+    subgraph VERSION["验收与版本层"]
+        direction TB
+        D["修订记录<br/>revision.json"]
+        Y{"用户验收"}
+        OK["接受修订"]
+        RB["回滚上一版本<br/>versions/vNNN"]
+    end
+
+    I --> V
+    V --> N
+    V --> U
+    N --> S
+    U --> S
+    S --> C --> T --> A --> K --> R --> D --> Y
+    Y -->|"通过"| OK
+    Y -->|"不通过"| RB
+    OK -. 继续审阅 .-> V
+    RB -. 恢复后重新审阅 .-> V
+
+    classDef input fill:#f4f1e9,stroke:#806f49,color:#1f2933;
+    classDef ui fill:#eef3f6,stroke:#607d93,color:#1f2933;
+    classDef core fill:#e6f0f5,stroke:#2f6488,color:#142433;
+    classDef agent fill:#edf4ef,stroke:#4e7762,color:#18352a;
+    classDef version fill:#f4f1e9,stroke:#806f49,color:#1f2933;
+    class I input;
+    class V,N,U ui;
+    class S,C,T core;
+    class A,K,R agent;
+    class D,Y,OK,RB version;

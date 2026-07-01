@@ -1,6 +1,6 @@
 # Manim 教学动画生成器
 
-Windows 桌面软件第一版：Electron 前端 + Python FastAPI 后端 + Manim Community Edition 渲染。用户可上传图片、输入提示词、选择模型配置，软件会生成教学规划、3-5 个分镜、Manim 代码、字幕文件，并自动运行 Manim。渲染失败时最多自动修复 3 轮，仍失败则生成简化可运行版本。
+Windows 桌面软件第一版：Electron 前端 + Python FastAPI 后端 + Manim Community Edition 渲染。用户可上传图片、输入提示词、选择模型配置，软件会生成教学规划、3-5 个分镜、Manim 代码、字幕文件，并自动运行 Manim。代码导致的渲染失败会持续调用模型修复，直至渲染成功；明确的本地环境错误会停止重试。
 
 ## 功能范围
 

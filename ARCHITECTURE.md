@@ -37,7 +37,7 @@ flowchart LR
 3. Code Generation：代码必须忠实执行 storyboard 和 visual design，不能重新发明画面。
 4. Static Guard：渲染前先做 `py_compile`，如果本机安装了 `mypy`，再做可选类型/名称检查。
 5. Visual Guard：检查旧主题素材、数学占位图、坐标轴/向量模板是否误入当前主题。
-6. Repair Loop：失败时把错误、当前代码、教学目标、分镜 visual_plan 一起发给模型，最多修复 3 轮。
+6. Repair Loop：失败时把错误、当前代码、教学目标、分镜 visual_plan 一起发给模型并持续修复，直至渲染成功；本地环境错误不继续调用模型。
 7. Render / Stitch / Export：渲染片段，拼接，写最终项目产物。
 
 这套程序的目的不是让软件只会生成固定模板，而是让每个主题都先形成自己的可视化设计，再由代码生成阶段忠实实现。

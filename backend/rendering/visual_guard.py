@@ -71,7 +71,11 @@ MATH_PLAN_TERMS = [
 
 BRIDGE_PLAN_TERMS = [
     "斜拉桥",
+    "悬索桥",
     "斜拉索",
+    "主缆",
+    "吊索",
+    "锚碇",
     "索力",
     "桥塔",
     "主梁",
@@ -98,6 +102,23 @@ PLACEHOLDER_ENDING_MARKERS = [
     "placeholder",
 ]
 
+INTERNAL_META_MARKERS = [
+    "分镜驱动生成：每一段都按 visual_plan 重新构图",
+    "画面元素来自当前教学计划和分镜文本",
+    "未使用旧主题素材",
+]
+
+LEGACY_PLACEHOLDER_CODE_MARKERS = [
+    "beat_note =",
+    "beat_visual =",
+    "timeline_group =",
+    "def relation_flow(",
+    "def layered_section(",
+]
+
+RAILWAY_VISUAL_TERMS = ["钢轨", "轨枕", "道床", "道砟", "路基", "轮载", "捣固"]
+RAILWAY_PLAN_TERMS = ["铁路", "轨道", "钢轨", "轨枕", "道床", "道砟", "路基", "railway", "ballast"]
+
 
 def run_visual_consistency_check(scene_file: Path, plan: TeachingPlan) -> VisualGuardResult:
     """Blocks obvious stale-topic assets before spending time rendering them."""
@@ -110,6 +131,31 @@ def run_visual_consistency_check(scene_file: Path, plan: TeachingPlan) -> Visual
         return VisualGuardResult(
             False,
             "生成代码包含当前教学计划中没有出现的旧主题素材或标签: " + ", ".join(stale_terms),
+            str(scene_file.resolve()),
+        )
+
+    meta_markers = [marker for marker in INTERNAL_META_MARKERS if marker in code]
+    if meta_markers:
+        return VisualGuardResult(
+            False,
+            "生成代码把内部 fallback/visual_plan 提示语绘制到了成片中: " + ", ".join(meta_markers),
+            str(scene_file.resolve()),
+        )
+
+    legacy_markers = [marker for marker in LEGACY_PLACEHOLDER_CODE_MARKERS if marker in code]
+    if legacy_markers:
+        return VisualGuardResult(
+            False,
+            "生成代码命中了已永久禁用的旧通用片段模板: " + ", ".join(legacy_markers),
+            str(scene_file.resolve()),
+        )
+
+    railway_visuals = [term for term in RAILWAY_VISUAL_TERMS if term in code]
+    railway_topic = any(term.lower() in plan_text.lower() for term in RAILWAY_PLAN_TERMS)
+    if railway_visuals and not railway_topic:
+        return VisualGuardResult(
+            False,
+            "当前主题不是铁路工程，但生成代码包含铁路专用视觉素材: " + ", ".join(railway_visuals),
             str(scene_file.resolve()),
         )
 

@@ -86,8 +86,9 @@ def test_bilibili_fallback_uses_storyboard_compiler_not_topic_template():
 
     code = router._code_from_storyboard(plan, 300)
 
-    assert "relation_flow" in code
-    assert "layered_section" in code
+    assert "focus_constellation" in code
+    assert "railway_section" not in code
+    assert "mass_spring_view" not in code
     assert "player =" not in code
     assert "category_cards" not in code
     assert "generic_board" not in code
@@ -117,7 +118,7 @@ def test_city_fallback_uses_storyboard_compiler_not_city_template():
     assert "palace_group" not in code
     assert "industry_group" not in code
     assert "attraction_cards" not in code
-    assert "relation_flow" in code
+    assert "focus_constellation" in code
     assert "NumberPlane" not in code
     assert "vec = Arrow" not in code
 
@@ -144,7 +145,7 @@ def test_country_fallback_does_not_reuse_shenyang_city_assets():
     assert "city_hub" not in code
     assert "\\u6c88\\u9633" not in code
     assert "category_cards" not in code
-    assert "relation_flow" in code
+    assert "focus_constellation" in code
     assert "axis_x" not in code
     assert "axis_y" not in code
 
@@ -270,7 +271,7 @@ def test_mojibake_question_marks_do_not_trigger_bilibili_template():
 
     assert "category_cards" not in code
     assert "generic_board" not in code
-    assert "relation_flow" in code
+    assert "focus_constellation" in code
 
 
 def test_cable_stayed_bridge_fallback_uses_storyboard_compiler():
@@ -308,8 +309,8 @@ def test_cable_stayed_bridge_fallback_uses_storyboard_compiler():
 
     code = router._code_from_storyboard(plan, 300)
 
-    assert "force_path" in code
-    assert "relation_flow" in code
+    assert "bridge_view" in code
+    assert "focus_constellation" in code
     assert "stay_cables" not in code
     assert "bridge_base" not in code
     assert "generic_board" not in code
@@ -352,10 +353,9 @@ def test_railway_ballast_storyboard_compiles_to_visual_skills():
 
     code = router._code_from_storyboard(plan, 300)
 
-    assert "layered_section" in code
-    assert "force_path" in code
-    assert "construction_machine" in code
-    assert "ballast_particles" in code
+    assert "railway_section" in code
+    assert "bridge_view" not in code
+    assert "每一段都按 visual plan 重新构图" not in code
     assert "generic_board" not in code
     assert "core_region" not in code
 
@@ -420,5 +420,5 @@ async def test_city_segment_generation_uses_local_template_without_ai_call():
     assert "GeneratedTeachingScene" in code
     assert "generic_board" not in code
     assert "city_hub" not in code
-    assert "relation_flow" in code
+    assert "focus_constellation" in code
     assert "NumberPlane" not in code

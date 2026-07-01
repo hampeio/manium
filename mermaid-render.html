@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <style>
+    html, body { margin: 0; background: white; }
+    body { padding: 28px; font-family: "Microsoft YaHei", sans-serif; }
+    #diagram { width: 1744px; min-height: 1300px; display: flex; align-items: flex-start; justify-content: center; }
+    #diagram svg { max-width: 100%; height: auto; }
+  </style>
+</head>
+<body>
+  <div id="diagram"></div>
+  <script src="mermaid.min.js"></script>
+  <script>
+    (async () => {
+      const file = new URLSearchParams(location.search).get("file");
+      const source = await (await fetch(file)).text();
+      mermaid.initialize({
+        startOnLoad: false,
+        theme: "base",
+        securityLevel: "loose",
+        flowchart: { curve: "basis", nodeSpacing: 38, rankSpacing: 55, htmlLabels: true },
+        themeVariables: {
+          fontFamily: "Microsoft YaHei",
+          primaryColor: "#e8f1f6",
+          primaryBorderColor: "#32678e",
+          primaryTextColor: "#172433",
+          lineColor: "#6f7f8b",
+          clusterBkg: "#f7f9fa",
+          clusterBorder: "#aebbc5"
+        }
+      });
+      const { svg } = await mermaid.render("architecture", source);
+      document.getElementById("diagram").innerHTML = svg;
+      document.title = "READY";
+    })();
+  </script>
+</body>
+</html>
